@@ -1,14 +1,36 @@
 import Foundation
 import Security
+import UsageCore
+
+/// Where Settings keeps secrets. `Keychain` is the real one; tests use a fake so they
+/// never touch the login keychain. Calls may block while macOS shows an access prompt,
+/// so callers run them off the main thread.
+protocol SecretStore: Sendable {
+    func read(_ account: Keychain.Account) throws -> String?
+    func write(_ value: String, for account: Keychain.Account) throws
+    func delete(_ account: Keychain.Account) throws
+}
 
 /// Generic-password items in the login keychain, one per secret. T9c owns and extends
 /// this; T1 uses it for the ocgo token and the debug write.
-struct Keychain: Sendable {
+///
+/// Access is tied to the app's code signature. An ad-hoc signature pins the cdhash, so
+/// every rebuild prompts again; build with a local self-signed identity
+/// (`CODESIGN_IDENTITY=... make app`) to keep items readable across rebuilds.
+struct Keychain: SecretStore {
     static let defaultService = "ca.lals.usage-monitor"
 
     enum Account: String, Sendable {
         case ocgoToken = "ocgo-token"
         case cliproxyKey = "cliproxy-key"
+
+        /// The account Settings stores a source's secret under.
+        static func secret(for kind: SourceKind) -> Account {
+            switch kind {
+            case .cliproxy: .cliproxyKey
+            case .ocgo: .ocgoToken
+            }
+        }
         /// The debug menu's test token. Separate from the real secrets so writing it
         /// never overwrites a live credential.
         case debugTestToken = "debug-test-token"
