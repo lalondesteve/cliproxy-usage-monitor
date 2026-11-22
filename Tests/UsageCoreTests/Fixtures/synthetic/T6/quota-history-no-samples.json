@@ -1,0 +1,9 @@
+{
+  "accounts": [
+    { "id": "claude-1a2b3c4d-user-1@example.com.json", "provider": "anthropic", "status": "ok" }
+  ],
+  "pools": [
+    { "provider": "anthropic", "window": "short", "history": [] },
+    { "provider": "anthropic", "window": "weekly", "history": [] }
+  ]
+}

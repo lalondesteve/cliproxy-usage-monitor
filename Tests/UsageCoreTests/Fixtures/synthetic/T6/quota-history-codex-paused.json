@@ -1,0 +1,35 @@
+{
+  "accounts": [
+    {
+      "id": "claude-1a2b3c4d-user-1@example.com.json",
+      "provider": "anthropic",
+      "status": "ok",
+      "reading": {
+        "observedAt": "2026-11-22T11:55:00Z",
+        "windows": { "short": { "remaining": 70, "resetAt": "2026-11-22T14:10:00Z" } }
+      }
+    },
+    { "id": "codex-user-3@example.com-plus.json", "provider": "codex", "status": "paused" },
+    { "id": "codex-user-4@example.com-team.json", "provider": "codex", "status": "paused" }
+  ],
+  "pools": [
+    {
+      "provider": "anthropic",
+      "window": "short",
+      "history": [
+        { "time": "2026-11-22T11:00:00Z", "accounts": [
+          { "id": "claude-1a2b3c4d-user-1@example.com.json", "status": "ok", "remaining": 80, "observedAt": "2026-11-22T10:55:00Z", "resetAt": "2026-11-22T14:10:00Z" }
+        ] }
+      ]
+    },
+    {
+      "provider": "codex",
+      "window": "weekly",
+      "history": [
+        { "time": "2026-11-21T09:00:00Z", "accounts": [
+          { "id": "codex-user-3@example.com-plus.json", "status": "ok", "remaining": 90, "observedAt": "2026-11-21T08:55:00Z", "resetAt": "2026-11-25T09:00:00Z" }
+        ] }
+      ]
+    }
+  ]
+}
