@@ -246,7 +246,9 @@ struct UnclassifiedDetail: Equatable { let alias: String; let lengthSeconds: Int
 enum LockoutForecast: Equatable { case safe, lockout(from: Date, to: Date),
                                   withheld(reason: String), insufficientData }
 struct ForecastSummary: Equatable { let poolBurnPerHour: Double?; let lockout: LockoutForecast
-  let weeklyRunOut: Date?; let weeklyResets: Date? }
+  let weekly: [WeeklyRunOut] }                // one per account, each to its own reset
+struct WeeklyRunOut: Equatable { let account: AccountID; let alias: String
+  let runOut: Date?; let resets: Date? }       // runOut nil: no run-out before reset, or no rate
 enum SourceStatus: Equatable { case ok(at: Date), authStopped(SourceError), failing(SourceError, since: Date), notConfigured }
 struct DashboardModel: Equatable { let generatedAt: Date; let rows: [ProviderRow]
                                    let sources: [SourceKind: SourceStatus] }

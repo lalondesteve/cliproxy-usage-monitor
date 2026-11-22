@@ -1,0 +1,50 @@
+{
+  "time": "2026-11-22T12:00:00Z",
+  "accounts": [
+    {
+      "name": "team-a",
+      "available": true,
+      "headroom": 48,
+      "exhausted": false,
+      "polled_at": "2026-11-22T11:58:30.123456789Z",
+      "poll_error": "",
+      "windows": {
+        "rolling": { "status": "ok", "percent": 52, "resets_at": "2026-11-22T14:10:00Z" },
+        "weekly": { "status": "ok", "percent": 20, "resets_at": "2026-11-26T09:00:00Z" },
+        "monthly": { "status": "ok", "percent": 11, "resets_at": "2026-12-01T00:00:00Z" }
+      },
+      "console_available": true,
+      "free_available": true
+    },
+    {
+      "name": "team-b",
+      "available": true,
+      "headroom": 60,
+      "exhausted": false,
+      "polled_at": "2026-11-22T11:59:00Z",
+      "poll_error": "",
+      "windows": {
+        "rolling": { "status": "ok", "percent": 40, "resets_at": "2026-11-22T15:30:00+00:00" },
+        "weekly": { "status": "ok", "percent": 35, "resets_at": "2026-11-27T09:00:00Z" },
+        "monthly": { "status": "ok", "percent": 18, "resets_at": "2026-12-01T00:00:00Z" }
+      },
+      "console_available": true,
+      "free_available": true
+    },
+    {
+      "name": "team-c",
+      "available": true,
+      "headroom": 36,
+      "exhausted": false,
+      "polled_at": "2026-11-22T11:59:30Z",
+      "poll_error": "",
+      "windows": {
+        "rolling": { "status": "ok", "percent": 64, "resets_at": "0001-01-01T00:00:00Z" },
+        "weekly": { "status": "ok", "percent": 50, "resets_at": "2026-11-28T09:00:00Z" },
+        "monthly": { "status": "ok", "percent": 25, "resets_at": "2026-12-01T00:00:00Z" }
+      },
+      "console_available": true,
+      "free_available": true
+    }
+  ]
+}
