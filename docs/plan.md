@@ -196,7 +196,7 @@ Mockup: [docs/mockups/gauges-overlap.html](mockups/gauges-overlap.html), option 
   subscription, the pooled % as the number beside the line, and under it, bottom
   right, the time left before the next reset ("reset in 1h 35m", the next refill as
   Pool rule 5 defines it, which also covers the case where every non-full
-  subscription is blocked; "reset in 5h" when every subscription is full, since a new
+  subscription is blocked; "reset in 5h" when every enabled subscription has full, usable 5-hour quota, since a new
   window starts with the next request). Hover gives each subscription's %, refill
   time and freshness.
 - Menubar: no line. Each provider's monochrome logo and its pooled 5-hour usable %
@@ -416,7 +416,7 @@ alternative if ours stalls.
 - 2026-11-22: polling runs in the app; no collector service. The menubar app is the
   only client. No alerts; the app is informative only.
 - 2026-11-22, after review: the menubar % is the 5-hour usable pool share. "Reset in
-  5h" stays when every subscription is full.
+  5h" stays when every enabled subscription has full, usable 5-hour quota.
 
 ## Open questions
 
