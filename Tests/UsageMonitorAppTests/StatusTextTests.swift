@@ -19,34 +19,17 @@ struct StatusTextTests {
 
     @Test func launchOptions() {
         let o = LaunchOptions.parse(["bin", "-NSDocumentRevisionsDebugMode", "YES",
-                                     "--ocgo-url", "http://100.64.0.1:8320", "--debug-write-test-token"])
-        #expect(o.ocgoURL == URL(string: "http://100.64.0.1:8320"))
-        #expect(o.debugWriteTestToken)
-        #expect(o.ocgoFixture == nil)
+                                     "--fixtures", "/tmp/capture", "--now", "2026-11-22T12:00:00Z",
+                                     "--debug-snapshot", "/tmp/item.png", "--ocgo-url", "http://h:8320"])
+        #expect(o.fixtures?.path == "/tmp/capture")
+        #expect(o.now == ISO8601DateFormatter().date(from: "2026-11-22T12:00:00Z"))
+        #expect(o.debugSnapshot?.path == "/tmp/item.png")
+        #expect(o.problems.isEmpty)
         #expect(LaunchOptions.parse(["bin"]) == LaunchOptions())
     }
 
     @Test func debugTokenHasItsOwnKeychainAccount() {
         #expect(Keychain.Account.debugTestToken.rawValue != Keychain.Account.ocgoToken.rawValue)
         #expect(Keychain.Account.debugTestToken.rawValue != Keychain.Account.cliproxyKey.rawValue)
-    }
-
-    @Test func liveURLWithoutTokenIsAnError() {
-        var o = LaunchOptions()
-        o.ocgoURL = URL(string: "http://h:8320")
-        guard case .failure(.noToken) = Wiring.ocgoSource(options: o, token: nil) else {
-            Issue.record("expected noToken")
-            return
-        }
-    }
-
-    @Test func fixtureSourcePollsTo48() async throws {
-        var o = LaunchOptions()
-        o.ocgoFixture = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("UsageCoreTests/Fixtures/synthetic/T1/ocgo-status.json")
-        let setup = try Wiring.ocgoSource(options: o, token: nil).get()
-        let model = try await Wiring.poll(setup.source).get()
-        #expect(StatusText.title(for: model.row(.go)?.fiveHour) == "48%")
     }
 }

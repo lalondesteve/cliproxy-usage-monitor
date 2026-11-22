@@ -3,7 +3,8 @@
 export DEVELOPER_DIR := /Applications/Xcode.app/Contents/Developer
 
 APP := build/UsageMonitor.app
-# Extra arguments for `make run`, e.g. make run ARGS="--ocgo-url http://host:8320"
+# Extra arguments for `make run`, e.g. a capture folder instead of the network:
+# make run ARGS="--fixtures Tests/UsageCoreTests/Fixtures/synthetic/T10 --now 2026-11-22T12:00:00Z"
 ARGS ?=
 
 .PHONY: build test check-core-imports app run clean

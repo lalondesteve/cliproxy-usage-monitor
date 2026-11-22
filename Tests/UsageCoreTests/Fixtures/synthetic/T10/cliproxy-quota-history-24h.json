@@ -1,0 +1,27 @@
+{
+  "accounts": [
+    {
+      "id": "claude-bbbb2222-user-2@example.com.json",
+      "provider": "anthropic",
+      "status": "ok",
+      "reading": {
+        "observedAt": "2026-11-22T11:55:00Z",
+        "windows": {
+          "short": { "remaining": 50, "resetAt": "2026-11-22T13:30:00Z" },
+          "weekly": { "remaining": 80, "resetAt": "2026-11-26T09:00:00Z" }
+        }
+      }
+    }
+  ],
+  "pools": [
+    {
+      "provider": "anthropic",
+      "window": "short",
+      "history": [
+        { "time": "2026-11-22T11:50:00Z", "accounts": [
+          { "id": "claude-bbbb2222-user-2@example.com.json", "status": "ok", "remaining": 55, "observedAt": "2026-11-22T11:50:00Z", "resetAt": "2026-11-22T13:30:00Z" }
+        ] }
+      ]
+    }
+  ]
+}

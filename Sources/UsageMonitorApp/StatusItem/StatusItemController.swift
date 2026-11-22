@@ -10,16 +10,16 @@ import UsageCore
 ///   expanded opens the dropdown (`CompactExpander`).
 ///
 /// The dropdown is whatever `onOpenDropdown` does (T9b's popover, anchored on
-/// `anchorView`). Until it's connected, and on right-click or control-click, the T1
-/// debug menu opens instead.
+/// `anchorView`). Right-click or control-click opens the menu (Settings, Refresh,
+/// Quit), as does a click while `onOpenDropdown` isn't connected.
 @MainActor
 final class StatusItemController: NSObject {
     struct Actions {
         var refresh: () -> Void
-        var writeTestToken: () -> Void
+        var openSettings: () -> Void
     }
 
-    /// Opens the dropdown. When nil, the T1 debug menu is shown.
+    /// Opens the dropdown. When nil, the menu is shown.
     var onOpenDropdown: (() -> Void)?
 
     var style: MenubarStyle {
@@ -34,13 +34,10 @@ final class StatusItemController: NSObject {
     var anchorView: NSView? { item.button }
 
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-    private let sourceLine = NSMenuItem(title: "Source: …", action: nil, keyEquivalent: "")
-    private let tokenLine = NSMenuItem(title: "ocgo token: …", action: nil, keyEquivalent: "")
-    private let testTokenLine = NSMenuItem(title: "Debug test token: …", action: nil, keyEquivalent: "")
     private let statusLine = NSMenuItem(title: "Status: loading", action: nil, keyEquivalent: "")
     private let actions: Actions
     private let expander: CompactExpander
-    private lazy var debugMenu = makeMenu()
+    private lazy var menu = makeMenu()
     private var display = StatusDisplay()
     private var logos: [Provider: NSImage] = [:]
     private lazy var compactGlyph = StatusAssets.compactGlyph()
@@ -64,25 +61,47 @@ final class StatusItemController: NSObject {
 
     func show(_ model: DashboardModel) {
         display.show(model)
-        if let gauge = model.row(.go)?.fiveHour {
-            statusLine.title = "Go 5-hour: \(gauge.known) of \(gauge.total) known"
-        } else {
-            statusLine.title = "Go: no data"
-        }
+        statusLine.title = Self.statusLine(for: model)
         render()
     }
 
+    /// The menu's first line: each configured source's state, or "Not configured".
+    nonisolated static func statusLine(for model: DashboardModel, timeZone: TimeZone = .current) -> String {
+        let time = Date.FormatStyle(date: .omitted, time: .shortened, timeZone: timeZone)
+        let parts = SourceKind.allCases.compactMap { kind -> String? in
+            let name = SetupForm.name(kind)
+            switch model.sources[kind] {
+            case .notConfigured: return nil
+            case nil: return "\(name): waiting for the first poll"
+            case .ok(let at): return "\(name): updated \(at.formatted(time))"
+            case .authStopped(let e): return "\(name): stopped, \(shortReason(e, kind))"
+            case .failing(let e, let since):
+                return "\(name): failing since \(since.formatted(time)), \(shortReason(e, kind))"
+            }
+        }
+        return parts.isEmpty ? "Not configured" : parts.joined(separator: " · ")
+    }
+
+    nonisolated static func shortReason(_ e: SourceError, _ kind: SourceKind) -> String {
+        switch e {
+        case .unauthorized: kind == .cliproxy ? "management key rejected" : "token rejected"
+        case .remoteManagementDisabled: "remote management off"
+        case .ipBanned: "IP banned"
+        case .tlsUntrusted: "TLS certificate not trusted"
+        case .timeout: "timed out"
+        case .unreachable: "unreachable"
+        case .http(let code): "HTTP \(code)"
+        case .decoding: "unexpected response"
+        }
+    }
+
     /// No model to show: the item falls back to the compact glyph; the error is in the
-    /// tooltip and the debug menu.
+    /// tooltip and the menu.
     func showError(_ message: String) {
         display.showError(message)
         statusLine.title = "Error: \(message)"
         render()
     }
-
-    func setSourceDescription(_ text: String) { sourceLine.title = "Source: \(text)" }
-    func setTokenDescription(_ text: String) { tokenLine.title = "ocgo token: \(text)" }
-    func setTestTokenDescription(_ text: String) { testTokenLine.title = "Debug test token: \(text)" }
 
     private func render() {
         expander.hasEntries = !display.entries.isEmpty
@@ -104,7 +123,7 @@ final class StatusItemController: NSObject {
     @objc private func clicked() {
         if let event = NSApp.currentEvent,
            event.type == .rightMouseUp || event.modifierFlags.contains(.control) {
-            showDebugMenu()
+            showMenu()
             return
         }
         expander.click()
@@ -114,14 +133,14 @@ final class StatusItemController: NSObject {
         if let onOpenDropdown {
             onOpenDropdown()
         } else {
-            showDebugMenu()
+            showMenu()
         }
     }
 
     /// Blocks until the menu closes.
-    private func showDebugMenu() {
+    private func showMenu() {
         guard let button = item.button else { return }
-        debugMenu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 4), in: button)
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 4), in: button)
     }
 
     /// Debug: the status item's state and a PNG of its button as drawn in the button's
@@ -154,13 +173,11 @@ final class StatusItemController: NSObject {
 
     private func makeMenu() -> NSMenu {
         let menu = NSMenu()
-        for line in [sourceLine, tokenLine, statusLine, testTokenLine] {
-            line.isEnabled = false
-            menu.addItem(line)
-        }
+        statusLine.isEnabled = false
+        menu.addItem(statusLine)
         menu.addItem(.separator())
+        menu.addItem(item(title: "Settings…", action: #selector(openSettings), key: ","))
         menu.addItem(item(title: "Refresh", action: #selector(refresh), key: "r"))
-        menu.addItem(item(title: "Debug: Write Test Token", action: #selector(writeTestToken), key: ""))
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Usage Monitor",
                      action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -174,5 +191,5 @@ final class StatusItemController: NSObject {
     }
 
     @objc private func refresh() { actions.refresh() }
-    @objc private func writeTestToken() { actions.writeTestToken() }
+    @objc private func openSettings() { actions.openSettings() }
 }

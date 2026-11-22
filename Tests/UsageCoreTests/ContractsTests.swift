@@ -100,7 +100,7 @@ struct ContractsTests {
         await control.poolSettingsChanged(PoolSettings())
         let ledger: any LedgerUpdating = FakeLedger()
         ledger.apply(readings: [])
-        let builder: DashboardBuilder = TracerPool.dashboard
+        let builder: DashboardBuilder = PoolEngine.dashboard(ledger:settings:sources:now:)
         #expect(builder(ledger, PoolSettings(), [:], t).rows.isEmpty)
         let _: any NowProvider = SystemNowProvider()
         let _: any HTTPTransport = URLSessionTransport()

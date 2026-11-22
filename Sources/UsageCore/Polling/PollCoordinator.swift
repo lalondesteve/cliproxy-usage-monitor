@@ -15,7 +15,10 @@ import Foundation
 /// cliproxy, or from a Test of the saved configuration, stops every request to that
 /// source. Only `PollControl` clears it: `configChanged(kind)`, or `test(kind, config)`
 /// with the saved configuration when its single request succeeds. Clearing it polls
-/// that source at once. A Test of any other configuration never touches the latch.
+/// that source at once. A successful Test of values other than the ones the
+/// coordinator polls with reads `savedConfig` again; if the saved configuration now
+/// equals them, the source is rebuilt with it, as `configChanged` does. A Test of any
+/// other configuration never touches the latch.
 ///
 /// Each source has a configuration revision, bumped by `configChanged`. A result that
 /// comes back after the revision moved on is dropped, even when the configuration
@@ -238,10 +241,22 @@ public actor PollCoordinator: PollControl {
         let revision = revisions[kind, default: 0]
         let source = configured[kind]?.source ?? setup.makeSource(kind, config)
         let result = await source.test(config)
-        // Only a Test of the saved configuration, still current, touches the latch.
-        guard revisions[kind, default: 0] == revision, configured[kind]?.config == config else {
+        guard revisions[kind, default: 0] == revision else { return result }
+        // The saved configuration may have moved on since it was last read (a Keychain
+        // read denied at launch, allowed now): read it again, and adopt it as
+        // `configChanged` would when the tested values are what is saved.
+        if case .success = result, configured[kind]?.config != config,
+           let saved = Self.configure(kind, setup: setup), saved.config == config {
+            revisions[kind, default: 0] += 1
+            configured[kind] = saved
+            latches[kind] = nil
+            statuses[kind] = lastStatus(kind)
+            if kind == .cliproxy { forkRouteMissing = false }
+            await poll([kind])
             return result
         }
+        // Only a Test of the saved configuration, still current, touches the latch.
+        guard configured[kind]?.config == config else { return result }
         // Both branches bump the revision, so a request started before the Test (say a
         // late 401) can't undo what the Test decided.
         switch result {

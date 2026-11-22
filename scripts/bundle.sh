@@ -19,14 +19,11 @@ if [[ ! -x "$BIN" ]]; then
 fi
 
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/fixtures"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 cp "$BIN" "$APP/Contents/MacOS/UsageMonitor"
 cp "$ROOT"/assets/logos/*.svg "$APP/Contents/Resources/"
 cp "$ROOT/assets/icons/compact.svg" "$APP/Contents/Resources/"
-# Default data source until a live ocgo URL is given.
-cp "$ROOT/Tests/UsageCoreTests/Fixtures/synthetic/T1/ocgo-status.json" \
-   "$APP/Contents/Resources/fixtures/ocgo-status.json"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

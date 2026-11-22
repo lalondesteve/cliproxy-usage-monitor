@@ -9,6 +9,8 @@ import UsageCore
 final class DropdownState {
     var model: DashboardModel?
     var timeZone: TimeZone = .current
+    /// Added to wall time for ages and countdowns (`--now` in development).
+    var clockOffset: TimeInterval = 0
 }
 
 /// Ticks once a minute so ages and countdowns move while the popover is open.
@@ -18,7 +20,8 @@ struct DropdownRootView: View {
     var body: some View {
         TimelineView(.everyMinute) { context in
             DropdownView(model: state.model,
-                         clock: DropdownClock(now: context.date, timeZone: state.timeZone))
+                         clock: DropdownClock(now: context.date.addingTimeInterval(state.clockOffset),
+                                              timeZone: state.timeZone))
         }
     }
 }
