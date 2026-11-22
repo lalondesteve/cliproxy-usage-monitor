@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>usage-monitor: nested line gauges</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+.viz-root {
+  color-scheme: light;
+  --surface-1: #fcfcfb;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #8a8984;
+  --track: #e9e8e4;
+  --menubar: #e4e3df;
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz-root {
+    color-scheme: dark;
+    --surface-1: #1a1a19; --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+    --track: #2b2b29; --menubar: #262624; --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
+  }
+}
+:root[data-theme="dark"] .viz-root {
+  color-scheme: dark;
+  --surface-1: #1a1a19; --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+  --track: #2b2b29; --menubar: #262624; --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+.viz-root { color: var(--text-primary); font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, sans-serif; }
+h1 { font-size: 19px; margin: 0 0 4px; }
+h2 { font-size: 14px; margin: 0 0 10px; color: var(--text-secondary); font-weight: 500; }
+p.sub { color: var(--text-secondary); margin: 0 0 14px; }
+.card { background: var(--surface-1); border-radius: 6px; padding: 18px 20px; margin: 0 0 14px; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin: 0 0 14px; color: var(--text-secondary); font-size: 13px; }
+.controls label { display: flex; gap: 6px; align-items: center; }
+.controls input[type=range] { width: 200px; accent-color: var(--series-1); }
+button, select { font: inherit; font-size: 12px; border-radius: 3px; border: 1px solid var(--track); background: var(--surface-1); color: var(--text-primary); padding: 3px 10px; cursor: pointer; }
+.time { font-variant-numeric: tabular-nums; color: var(--text-primary); min-width: 40px; }
+.hero { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.hero .num { font-size: 40px; font-weight: 600; letter-spacing: -0.5px; }
+.hero .lbl { color: var(--text-secondary); }
+.hero .meta { color: var(--text-muted); font-size: 12px; margin-left: auto; text-align: right; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; color: var(--text-secondary); font-size: 12px; margin-top: 10px; }
+.sw { display: inline-block; width: 8px; height: 8px; border-radius: 1px; margin-right: 6px; vertical-align: 0; }
+.legend b { color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+.rows .row { display: grid; grid-template-columns: 92px 1fr 46px 1fr 46px; gap: 10px; align-items: center; padding: 8px 0; }
+.rows .row + .row { border-top: 1px solid var(--track); }
+.rows .head { color: var(--text-muted); font-size: 11px; padding: 0 0 2px; }
+.rows .name { font-weight: 600; font-size: 13px; }
+.rows .pct { font-variant-numeric: tabular-nums; text-align: right; font-weight: 600; }
+.mbline { display: flex; align-items: center; gap: 14px; margin: 0 0 10px; }
+.mbline .tag { color: var(--text-muted); font-size: 12px; width: 180px; flex: none; }
+.menubar { display: inline-flex; gap: 14px; align-items: center; background: var(--menubar); border-radius: 2px; padding: 4px 12px; font-size: 12px; }
+.menubar span { display: inline-flex; gap: 6px; align-items: center; font-variant-numeric: tabular-nums; }
+.tip { position: fixed; pointer-events: none; background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--track);
+  border-radius: 3px; padding: 7px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.18); display: none; z-index: 10; }
+.note { color: var(--text-muted); font-size: 12px; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="viz-root">
+  <h1>Nested line gauges</h1>
+  <p class="sub">All lines start at the left. Each line's length is one subscription's remaining quota. Thinner lines sit on
+    top of thicker ones, so every subscription stays visible. Simulated: 3 Claude subscriptions on cliproxy round-robin at 90 %/h.</p>
+
+  <div class="controls">
+    <button id="play">▶ Play</button>
+    <label>Time <input id="time" type="range"> <span class="time" id="timeOut"></span></label>
+    <label>Thickness
+      <select id="mode">
+        <option value="rank">by remaining (fullest = thickest)</option>
+        <option value="fixed">fixed per subscription</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="gap" checked> hairline gap</label>
+  </div>
+
+  <div class="card">
+    <h2>Claude 5-hour</h2>
+    <div class="hero"><span class="num" id="heroNum"></span><span class="lbl">left across 3 subscriptions</span>
+      <span class="meta" id="heroMeta"></span></div>
+    <svg id="line" width="100%" viewBox="0 0 680 22" role="img" aria-label="Claude 5-hour remaining per subscription"></svg>
+    <div class="legend" id="lineLegend"></div>
+  </div>
+
+  <div class="card">
+    <h2>Dashboard rows · every provider</h2>
+    <div class="rows" id="rows"></div>
+  </div>
+
+  <div class="card">
+    <h2>Menubar · one color</h2>
+    <div class="mbline"><span class="tag">a. nested, monochrome</span><div class="menubar" id="mbNested"></div></div>
+    <div class="mbline"><span class="tag">b. fullest subscription only</span><div class="menubar" id="mbFullest"></div></div>
+    <div class="mbline"><span class="tag">c. nested, shades of one ink</span><div class="menubar" id="mbShades"></div></div>
+    <div class="note">a keeps every subscription as a thinner layer in the same ink. b shows one line, the fullest
+      subscription's remaining quota, and the % is that subscription's too. c is a with
+      lighter shades for the lower layers and no gap. Hover for the per-subscription numbers.</div>
+  </div>
+</div>
+<div class="tip" id="tip"></div>
+
+<script>
+const COLORS = ['var(--series-1)', 'var(--series-2)', 'var(--series-3)'];
+const RADIUS = 1;
+const T0 = 12 * 60 + 20, NOW = 13 * 60 + 20, T1 = NOW + 300, WINDOW = 300;
+const fmt = m => { m = Math.round(m) % 1440; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); };
+
+// Same toy model as gauges.html: round-robin, a 5h window starts at first use after a reset.
+function simulate(rate) {
+  const st = [{ used: 52, resetAt: 850 }, { used: 15, resetAt: 935 }, { used: 0, resetAt: null }];
+  const rows = [];
+  for (let t = T0; t <= T1; t++) {
+    st.forEach(s => { if (s.resetAt !== null && t >= s.resetAt) { s.used = 0; s.resetAt = null; } });
+    rows.push({ t, rem: st.map(s => 100 - s.used), resetAt: st.map(s => s.resetAt) });
+    let demand = rate / 60, pool = st.map((s, i) => i).filter(i => st[i].used < 100);
+    while (demand > 1e-9 && pool.length) {
+      const share = demand / pool.length;
+      pool.forEach(i => { const s = st[i]; if (s.resetAt === null) s.resetAt = t + WINDOW; const a = Math.min(share, 100 - s.used); s.used += a; demand -= a; });
+      pool = pool.filter(i => st[i].used < 100);
+    }
+  }
+  return rows;
+}
+const SIM = simulate(90);
+const STATIC = { claudeWeekly: [39, 60, 78], codex5: [72, 35], codexW: [80, 64], go5: [90, 88], goW: [55, 41] };
+
+const NS = 'http://www.w3.org/2000/svg';
+const el = (tag, a) => { const e = document.createElementNS(NS, tag); for (const k in a) e.setAttribute(k, a[k]); return e; };
+const $ = id => document.getElementById(id);
+const tip = $('tip');
+const showTip = (ev, html) => { tip.innerHTML = html; tip.style.display = 'block'; tip.style.left = ev.clientX + 14 + 'px'; tip.style.top = ev.clientY + 14 + 'px'; };
+const hideTip = () => { tip.style.display = 'none'; };
+
+// Bottom-to-top layer order with a thickness each.
+function layers(subs, maxT, minT) {
+  const order = subs.map((s, i) => i);
+  if ($('mode').value === 'rank') order.sort((a, b) => subs[b].rem - subs[a].rem || a - b);
+  const n = subs.length, step = n > 1 ? (maxT - minT) / (n - 1) : 0;
+  return order.map((i, k) => ({ ...subs[i], t: n > 1 ? maxT - k * step : maxT }));
+}
+
+function tipHtml(title, subs) {
+  return `<b>${title}</b>` + subs.map(s => `<div><span class="sw" style="background:${s.color}"></span>${s.name} <b>${Math.round(s.rem)}%</b>${s.reset ? ' · refills ' + s.reset : ''}</div>`).join('');
+}
+
+// Nested line: rectangles aligned at the left, centred vertically, near-square ends.
+// opts.mono draws every layer in one ink; opts.only draws just the bottom (fullest) layer.
+function drawLine(svg, subs, { width, maxT, minT, title, mono, only, shades }) {
+  svg.innerHTML = '';
+  const H = maxT, cy = H / 2;
+  svg.setAttribute('viewBox', `0 0 ${width} ${H}`);
+  const bar = (x, w, t, fill) => svg.appendChild(el('rect', { x, y: cy - t / 2, width: Math.max(0, w), height: t, rx: Math.min(RADIUS, t / 2), fill }));
+  bar(0, width, maxT, 'var(--track)');
+  const gap = $('gap').checked && !shades;
+  let ls = layers(subs, maxT, minT);
+  if (only) ls = ls.slice(0, 1);
+  ls.forEach((L, k) => {
+    if (L.rem <= 0) return;
+    const w = width * L.rem / 100;
+    if (gap && k > 0) svg.appendChild(el('rect', { x: 0, y: cy - L.t / 2 - 0.75, width: Math.min(width, w + 0.75), height: L.t + 1.5, fill: mono ? 'var(--menubar)' : 'var(--surface-1)' }));
+    const b = bar(0, w, L.t, mono || shades ? 'var(--text-primary)' : L.color);
+    if (shades) b.setAttribute('opacity', ls.length > 1 ? 0.3 + 0.7 * k / (ls.length - 1) : 1);
+  });
+  const hit = el('rect', { x: 0, y: 0, width, height: H, fill: 'transparent' });
+  hit.addEventListener('mousemove', ev => showTip(ev, tipHtml(title, subs)));
+  hit.addEventListener('mouseleave', hideTip);
+  svg.appendChild(hit);
+}
+
+const subsFrom = (prefix, vals, resets) => vals.map((rem, i) => ({ name: `${prefix}-${i + 1}`, rem, color: COLORS[i], reset: resets ? resets[i] : null }));
+const pool = subs => Math.round(subs.reduce((a, s) => a + s.rem, 0) / subs.length);
+const fullest = subs => Math.round(Math.max(...subs.map(s => s.rem)));
+
+function render() {
+  const t = +$('time').value;
+  const r = SIM[t - T0];
+  $('timeOut').textContent = fmt(t) + (t > NOW ? ' (forecast)' : t === NOW ? ' (now)' : '');
+  const claude5 = subsFrom('claude', r.rem, r.resetAt.map(x => (x === null ? null : fmt(x))));
+  const claudeW = subsFrom('claude', STATIC.claudeWeekly);
+
+  $('heroNum').textContent = pool(claude5) + '%';
+  const next = claude5.map((s, i) => ({ s, at: r.resetAt[i] })).filter(x => x.at !== null && x.s.rem < 100).sort((a, b) => a.at - b.at)[0];
+  $('heroMeta').innerHTML = next ? `next refill ${fmt(next.at)}<br>${next.s.name}, +${Math.round((100 - next.s.rem) / 3)}% of pool` : 'all full';
+  drawLine($('line'), claude5, { width: 680, maxT: 18, minT: 6, title: 'Claude 5-hour' });
+  $('lineLegend').innerHTML = claude5.map(s => `<span><span class="sw" style="background:${s.color}"></span>${s.name} <b>${Math.round(s.rem)}%</b>${s.reset ? ' · refills ' + s.reset : s.rem >= 100 ? ' · idle' : ''}</span>`).join('');
+
+  const providers = [
+    { name: 'Claude', short: 'Claude', s5: claude5, sW: claudeW },
+    { name: 'Codex', short: 'Codex', s5: subsFrom('codex', STATIC.codex5), sW: subsFrom('codex', STATIC.codexW) },
+    { name: 'OpenCode Go', short: 'Go', s5: subsFrom('go', STATIC.go5), sW: subsFrom('go', STATIC.goW) },
+  ];
+  const rows = $('rows');
+  rows.innerHTML = '<div class="row head"><span></span><span>5-hour</span><span></span><span>weekly</span><span></span></div>';
+  providers.forEach(p => {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `<span class="name">${p.name}</span><svg width="100%"></svg><span class="pct">${pool(p.s5)}%</span><svg width="100%"></svg><span class="pct">${pool(p.sW)}%</span>`;
+    rows.appendChild(row);
+    const [a, b] = row.querySelectorAll('svg');
+    drawLine(a, p.s5, { width: 260, maxT: 12, minT: 4, title: p.name + ' 5-hour' });
+    drawLine(b, p.sW, { width: 260, maxT: 12, minT: 4, title: p.name + ' weekly' });
+  });
+
+  for (const [id, only, shades] of [['mbNested', false, false], ['mbFullest', true, false], ['mbShades', false, true]]) {
+    const mb = $(id);
+    mb.innerHTML = '';
+    providers.forEach(p => {
+      const s = document.createElement('span');
+      s.innerHTML = `${p.short} <svg width="64" height="10"></svg> ${only ? fullest(p.s5) : pool(p.s5)}%`;
+      mb.appendChild(s);
+      drawLine(s.querySelector('svg'), p.s5, { width: 64, maxT: 10, minT: 2, title: p.name + ' 5-hour', mono: !shades, only, shades });
+    });
+  }
+}
+
+const slider = $('time');
+slider.min = T0; slider.max = T1; slider.value = NOW;
+slider.addEventListener('input', render);
+$('mode').addEventListener('change', render);
+$('gap').addEventListener('change', render);
+let timer = null;
+$('play').addEventListener('click', () => {
+  if (timer) { clearInterval(timer); timer = null; $('play').textContent = '▶ Play'; return; }
+  if (+slider.value >= T1) slider.value = T0;
+  $('play').textContent = '❚❚ Pause';
+  timer = setInterval(() => {
+    slider.value = Math.min(T1, +slider.value + 2);
+    render();
+    if (+slider.value >= T1) { clearInterval(timer); timer = null; $('play').textContent = '▶ Play'; }
+  }, 40);
+});
+render();
+</script>
+</body>
+</html>

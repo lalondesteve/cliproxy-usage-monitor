@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>usage-monitor: pool line variants</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+.viz-root {
+  color-scheme: light;
+  --surface-1: #fcfcfb; --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #8a8984;
+  --track: #e9e8e4; --menubar: #e4e3df;
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz-root {
+    color-scheme: dark;
+    --surface-1: #1a1a19; --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+    --track: #2e2e2c; --menubar: #262624; --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
+  }
+}
+:root[data-theme="dark"] .viz-root {
+  color-scheme: dark;
+  --surface-1: #1a1a19; --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+  --track: #2e2e2c; --menubar: #262624; --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+.viz-root { color: var(--text-primary); font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, sans-serif; }
+h1 { font-size: 19px; margin: 0 0 4px; }
+p.sub { color: var(--text-secondary); margin: 0 0 12px; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin: 0 0 12px; color: var(--text-secondary); font-size: 13px; }
+.controls label { display: flex; gap: 6px; align-items: center; }
+.controls input[type=range] { width: 220px; accent-color: var(--series-1); }
+button { font: inherit; font-size: 12px; border-radius: 3px; border: 1px solid var(--track); background: var(--surface-1); color: var(--text-primary); padding: 3px 10px; cursor: pointer; }
+.time { font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.legend { display: flex; gap: 14px; color: var(--text-secondary); font-size: 12px; margin: 0 0 12px; }
+.sw { display: inline-block; width: 8px; height: 8px; border-radius: 1px; margin-right: 5px; }
+.card { background: var(--surface-1); border-radius: 6px; padding: 14px 18px; margin: 0 0 10px; }
+.card h2 { font-size: 14px; margin: 0; }
+.card .what { color: var(--text-secondary); font-size: 12px; margin: 2px 0 10px; }
+.grid { display: grid; grid-template-columns: 64px minmax(0, 520px) 40px; gap: 6px 10px; align-items: center; }
+.grid .name { font-size: 12px; color: var(--text-secondary); }
+.grid .pct { font-size: 13px; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+.grid .aux { grid-column: 2 / 4; color: var(--text-muted); font-size: 11px; margin-top: -3px; }
+.mb { display: inline-flex; gap: 14px; align-items: center; background: var(--menubar); border-radius: 2px; padding: 4px 12px; font-size: 12px; margin-top: 10px; }
+.mb span { display: inline-flex; gap: 6px; align-items: center; font-variant-numeric: tabular-nums; }
+.verdict { display: flex; gap: 18px; font-size: 12px; margin-top: 8px; color: var(--text-secondary); }
+.verdict b { color: var(--text-primary); font-weight: 600; }
+.tip { position: fixed; pointer-events: none; background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--track);
+  border-radius: 3px; padding: 7px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.18); display: none; z-index: 10; }
+</style>
+</head>
+<body>
+<div class="viz-root">
+  <h1>Pool line variants: 2 and 3, then A to D</h1>
+  <p class="sub">Same simulated data in every option: Claude has 3 subscriptions (round-robin, 90 %/h), Codex and OpenCode Go have 2 each.
+    Each option shows a dashboard row and a single-color menubar version. Drag the time to see a subscription hit 0 % (around 14:25), refills, and the idle state.</p>
+  <div class="controls">
+    <button id="play">▶ Play</button>
+    <label>Time <input id="time" type="range"> <span class="time" id="timeOut"></span></label>
+  </div>
+  <div class="legend"><span><span class="sw" style="background:var(--series-1)"></span>sub 1</span>
+    <span><span class="sw" style="background:var(--series-2)"></span>sub 2</span>
+    <span><span class="sw" style="background:var(--series-3)"></span>sub 3</span></div>
+  <div id="cards"></div>
+</div>
+<div class="tip" id="tip"></div>
+
+<script>
+const COLORS = ['var(--series-1)', 'var(--series-2)', 'var(--series-3)'];
+const INK = 'var(--text-primary)';
+const T0 = 12 * 60 + 20, NOW = 13 * 60 + 20, T1 = NOW + 300, WINDOW = 300;
+const fmt = m => { m = Math.round(m) % 1440; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); };
+
+function simulate(rate) {
+  const st = [{ used: 52, resetAt: 850 }, { used: 15, resetAt: 935 }, { used: 0, resetAt: null }];
+  const rows = [];
+  for (let t = T0; t <= T1; t++) {
+    st.forEach(s => { if (s.resetAt !== null && t >= s.resetAt) { s.used = 0; s.resetAt = null; } });
+    rows.push({ rem: st.map(s => 100 - s.used), resetAt: st.map(s => s.resetAt) });
+    let demand = rate / 60, pool = st.map((s, i) => i).filter(i => st[i].used < 100);
+    while (demand > 1e-9 && pool.length) {
+      const share = demand / pool.length;
+      pool.forEach(i => { const s = st[i]; if (s.resetAt === null) s.resetAt = t + WINDOW; const a = Math.min(share, 100 - s.used); s.used += a; demand -= a; });
+      pool = pool.filter(i => st[i].used < 100);
+    }
+  }
+  return rows;
+}
+const SIM = simulate(90);
+
+const NS = 'http://www.w3.org/2000/svg';
+const $ = id => document.getElementById(id);
+const tip = $('tip');
+const showTip = (ev, html) => { tip.innerHTML = html; tip.style.display = 'block'; tip.style.left = ev.clientX + 14 + 'px'; tip.style.top = ev.clientY + 14 + 'px'; };
+const hideTip = () => { tip.style.display = 'none'; };
+
+// Tiny SVG builder. Every mark is a rect with at most a 1 px radius.
+function canvas(W, H) {
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('width', W); svg.setAttribute('height', H);
+  svg.style.maxWidth = '100%'; svg.style.display = 'block';
+  svg.rect = (x, y, w, h, fill, extra = {}) => {
+    const r = document.createElementNS(NS, 'rect');
+    Object.entries({ x, y, width: Math.max(0, w), height: h, rx: Math.min(1, h / 2), fill, ...extra }).forEach(([k, v]) => r.setAttribute(k, v));
+    svg.appendChild(r); return r;
+  };
+  return svg;
+}
+const pool = p => p.subs.reduce((a, s) => a + s.rem, 0) / p.subs.length;
+const byRem = subs => subs.slice().sort((a, b) => b.rem - a.rem);
+const color = (s, mono) => (mono ? INK : s.color);
+
+// Each option: draw(p, W, H, mono) returns an svg.
+// Left edges for marks of width w centred on xs, kept inside [min, W] and at least sep apart. Returned in input order.
+function place(xs, w, W, sep, min) {
+  const o = xs.map((x, i) => ({ i, l: Math.max(min, Math.min(W - w, x - w / 2)) })).sort((a, b) => a.l - b.l);
+  for (let k = 1; k < o.length; k++) o[k].l = Math.max(o[k].l, o[k - 1].l + w + sep);
+  for (let k = o.length - 1; k >= 0; k--) o[k].l = Math.min(o[k].l, k === o.length - 1 ? W - w : o[k + 1].l - w - sep);
+  const out = []; o.forEach(e => { out[e.i] = e.l; }); return out;
+}
+// Steps from left to right: [x0, x1, subs still above x0].
+function steps(p) {
+  const asc = p.subs.slice().sort((a, b) => a.rem - b.rem);
+  const out = []; let prev = 0;
+  asc.forEach((s, k) => { if (s.rem > prev) out.push([prev, s.rem, asc.slice(k)]); prev = Math.max(prev, s.rem); });
+  return out;
+}
+
+const OPTIONS = [
+  {
+    key: 'segments', name: '2. Segmented pool (reference)', h: 8, mh: 8,
+    what: 'One line for the whole pool. Each subscription adds a segment as long as its share; fullest first, so the right end is the next to run out.',
+    pros: 'length is the pool, parts still visible', cons: 'segments move when the order changes',
+    draw(p, W, H, mono) {
+      const svg = canvas(W, H), n = p.subs.length, gap = 2;
+      svg.rect(0, 0, W, H, 'var(--track)');
+      let x = 0;
+      byRem(p.subs).forEach((s, k) => {
+        const w = W * s.rem / 100 / n;
+        if (w <= 0) return;
+        svg.rect(x, 0, w - (k < n - 1 ? gap : 0), H, color(s, mono), mono ? { opacity: 1 - k * 0.28 } : {});
+        x += w;
+      });
+      return svg;
+    },
+  },
+  {
+    key: 'ticks', name: '3. Pool line with ticks (reference)', h: 8, mh: 8,
+    what: 'A thin line fills to the pool average. A short tick marks each subscription\'s own level on the same scale.',
+    pros: 'one clear number, spread at a glance', cons: 'ticks collide when values are close',
+    draw(p, W, H, mono) {
+      const svg = canvas(W, H), lh = Math.max(2, Math.round(H * 0.3)), y = (H - lh) / 2;
+      svg.rect(0, y, W, lh, 'var(--track)');
+      svg.rect(0, y, W * pool(p) / 100, lh, mono ? INK : 'var(--text-secondary)');
+      p.subs.forEach(s => svg.rect(Math.min(W - 2, W * s.rem / 100 - 1), 0, 2, H, color(s, mono)));
+      return svg;
+    },
+  },
+  {
+    key: 'inlay', name: 'A. Inlay', h: 6, mh: 6,
+    what: 'The line fills to the pool average. Each subscription is set into the line at its own level, at the line\'s height, so nothing sticks out. Menubar: a level inside the fill is a cut, a level beyond it is an ink mark.',
+    pros: 'stays one flat line; marks never collide (they are nudged apart)', cons: 'smaller marks than ticks; in one ink, a cut and a mark have to be learned',
+    draw(p, W, H, mono) {
+      const svg = canvas(W, H), px = W * pool(p) / 100, bg = mono ? 'var(--menubar)' : 'var(--surface-1)';
+      svg.rect(0, 0, W, H, 'var(--track)');
+      svg.rect(0, 0, px, H, mono ? INK : 'var(--text-secondary)');
+      const w = mono ? 2 : 4;
+      const ls = place(p.subs.map(s => W * s.rem / 100), w, W, 1, mono ? 2 : 0);
+      p.subs.forEach((s, i) => {
+        const l = ls[i];
+        if (!mono) { svg.rect(l - 1, 0, w + 2, H, bg, { rx: 0 }); svg.rect(l, 0, w, H, s.color, { rx: 0 }); return; }
+        if (Math.abs(W * s.rem / 100 - px) <= 1.5) return;            // the end of the fill already says it
+        if (l + w <= px) svg.rect(l, 0, w, H, bg, { rx: 0 });          // cut in the fill
+        else svg.rect(Math.max(l, px + 1), 0, w, H, INK, { rx: 0 });   // mark on the track
+      });
+      return svg;
+    },
+  },
+  {
+    key: 'echo', name: 'B. Segments with refill echo', h: 8, mh: 8,
+    what: 'Option 2, and the empty part is no longer anonymous: each subscription\'s used share follows as a pale segment, soonest refill first. The pale segment touching the fill is what comes back next. Menubar: only that next refill is outlined.',
+    pros: 'shows who refills next and how much it adds; fill length is still the pool', cons: 'order says "next", not "when"; busier than 2 with three subscriptions',
+    draw(p, W, H, mono) {
+      const svg = canvas(W, H), n = p.subs.length, gap = 2;
+      if (mono) svg.rect(0, 0, W, H, 'var(--track)');
+      const full = byRem(p.subs).filter(s => s.rem > 0).map((s, k) => ({ s, k, w: W * s.rem / 100 / n }));
+      const debt = p.subs.filter(s => s.rem < 100).sort((a, b) => (a.at ?? 1e9) - (b.at ?? 1e9)).map((s, k) => ({ s, k, debt: true, w: W * (100 - s.rem) / 100 / n }));
+      const all = full.concat(debt);
+      let x = 0;
+      all.forEach((pc, i) => {
+        const w = pc.w - (i < all.length - 1 ? gap : 0);
+        if (w > 0.5) {
+          if (!pc.debt) svg.rect(x, 0, w, H, color(pc.s, mono), mono ? { opacity: 1 - pc.k * 0.28 } : {});
+          else if (!mono) svg.rect(x, 0, w, H, pc.s.color, { opacity: pc.k === 0 ? 0.5 : 0.26 });
+          else if (pc.k === 0 && w >= 3) svg.rect(x + 0.5, 0.5, w - 1, H - 1, 'none', { stroke: INK, 'stroke-width': 1, opacity: 0.7, rx: 0 });
+        }
+        x += pc.w;
+      });
+      return svg;
+    },
+  },
+  {
+    key: 'fade', name: 'C. Fade', h: 8, mh: 8,
+    what: 'One ink, no bands. The line is solid as far as every subscription reaches and gets one step paler each time one runs out; it ends at the fullest. A cut marks the pool average. Dashboard: a colored end-stop names the subscription that stops there.',
+    pros: 'identical in color and in one ink; an even pool is a plain solid line', cons: 'the pool is a cut, not a length; a subscription at 0 % makes the whole line pale',
+    draw(p, W, H, mono) {
+      const svg = canvas(W, H), n = p.subs.length, bg = mono ? 'var(--menubar)' : 'var(--surface-1)';
+      svg.rect(0, 0, W, H, 'var(--track)');
+      steps(p).forEach(([a, b, present]) => {
+        const m = present.length;
+        svg.rect(W * a / 100, 0, W * (b - a) / 100, H, INK, { rx: 0, opacity: m === n ? 1 : 0.3 + 0.28 * (m - 1) });
+      });
+      const px = Math.max(1, Math.min(W - 1, W * pool(p) / 100));
+      if (pool(p) < 99.5) svg.rect(px - 1, 0, 2, H, bg, { rx: 0 });
+      if (!mono) {
+        const ls = place(p.subs.map(s => W * s.rem / 100 - 1.5), 3, W, 0, 0);
+        p.subs.forEach((s, i) => svg.rect(ls[i], 0, 3, H, s.color, { rx: 0 }));
+      }
+      return svg;
+    },
+  },
+  {
+    key: 'rail', name: 'D. Refill rail', h: 12, mh: 11,
+    what: 'The pool line on top is the amount. The teeth under it are time: the row is the next 5 hours, left is now. Each subscription hangs a tooth at its refill time; a longer tooth means more comes back.',
+    pros: 'the only one that says when relief comes; a tooth at the far left is a refill about to land', cons: 'two scales on one row (percent above, hours below); a full subscription has no tooth',
+    aux(p) {
+      if (!p.next) return 'idle: nothing to refill';
+      const d = p.next.at - p.now, gain = (100 - p.next.rem) / p.subs.length;
+      return `next refill in ${Math.floor(d / 60)} h ${String(Math.round(d % 60)).padStart(2, '0')} · +${Math.round(gain)} % pooled`;
+    },
+    draw(p, W, H, mono) {
+      const svg = canvas(W, H), lh = mono ? 4 : 5, room = H - lh - 1;
+      svg.rect(0, 0, W, lh, 'var(--track)');
+      svg.rect(0, 0, W * pool(p) / 100, lh, mono ? INK : 'var(--text-secondary)');
+      const due = p.subs.filter(s => s.at !== null && s.rem < 100);
+      const ls = place(due.map(s => W * (s.at - p.now) / WINDOW), 2, W, 1, 0);
+      due.forEach((s, i) => svg.rect(ls[i], lh + 1, 2, Math.round(3 + (room - 3) * (100 - s.rem) / 100), color(s, mono), { rx: 0 }));
+      return svg;
+    },
+  },
+];
+
+function providers(t) {
+  const r = SIM[t - T0];
+  const mk = (name, short, vals, resetAt) => {
+    const subs = vals.map((rem, i) => ({ name: `${short.toLowerCase()}-${i + 1}`, rem, color: COLORS[i], at: resetAt ? resetAt[i] : null }));
+    const next = subs.filter(s => s.at !== null && s.rem < 100).sort((a, b) => a.at - b.at)[0] || null;
+    return { name, short, subs, next, now: t };
+  };
+  return [
+    mk('Claude', 'Claude', r.rem, r.resetAt),
+    mk('Codex', 'Codex', [72, 35], [t + 95, t + 200]),
+    mk('Go', 'Go', [90, 88], [t + 40, t + 170]),
+  ];
+}
+
+function tipFor(p) {
+  return `<b>${p.name} 5-hour · ${Math.round(pool(p))}% pooled</b>` +
+    p.subs.map(s => `<div><span class="sw" style="background:${s.color}"></span>${s.name} ${Math.round(s.rem)}%${s.at !== null ? ' · refills ' + fmt(s.at) : ''}</div>`).join('');
+}
+function hover(svg, p) { svg.addEventListener('mousemove', ev => showTip(ev, tipFor(p))); svg.addEventListener('mouseleave', hideTip); }
+
+function render() {
+  const t = +$('time').value;
+  $('timeOut').textContent = fmt(t) + (t > NOW ? ' (forecast)' : t === NOW ? ' (now)' : '');
+  const ps = providers(t);
+  const cards = $('cards');
+  cards.innerHTML = '';
+  OPTIONS.forEach(o => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `<h2>${o.name}</h2><div class="what">${o.what}</div><div class="grid"></div><div class="mb"></div>
+      <div class="verdict"><span><b>+</b> ${o.pros}</span><span><b>−</b> ${o.cons}</span></div>`;
+    const grid = card.querySelector('.grid'), mb = card.querySelector('.mb');
+    ps.forEach(p => {
+      const name = document.createElement('span'); name.className = 'name'; name.textContent = p.name;
+      const svg = o.draw(p, 520, o.h, false);
+      const pct = document.createElement('span'); pct.className = 'pct'; pct.textContent = Math.round(pool(p)) + '%';
+      grid.append(name, svg, pct);
+      hover(svg, p);
+      if (o.aux) { const a = document.createElement('span'); a.className = 'aux'; a.textContent = o.aux(p); grid.append(document.createElement('span'), a); }
+      const item = document.createElement('span');
+      item.append(p.short);
+      const m = o.draw(p, 56, o.mh, true);
+      hover(m, p);
+      item.append(m, Math.round(pool(p)) + '%');
+      mb.append(item);
+    });
+    cards.append(card);
+  });
+}
+
+const slider = $('time');
+slider.min = T0; slider.max = T1; slider.value = NOW;
+slider.addEventListener('input', render);
+let timer = null;
+$('play').addEventListener('click', () => {
+  if (timer) { clearInterval(timer); timer = null; $('play').textContent = '▶ Play'; return; }
+  if (+slider.value >= T1) slider.value = T0;
+  $('play').textContent = '❚❚ Pause';
+  timer = setInterval(() => {
+    slider.value = Math.min(T1, +slider.value + 2); render();
+    if (+slider.value >= T1) { clearInterval(timer); timer = null; $('play').textContent = '▶ Play'; }
+  }, 50);
+});
+render();
+</script>
+</body>
+</html>

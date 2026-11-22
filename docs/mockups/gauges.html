@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>usage-monitor gauge concepts</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+.viz-root {
+  color-scheme: light;
+  --surface-0: #f3f2ef;
+  --surface-1: #fcfcfb;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #8a8984;
+  --grid: #e4e3df;
+  --track: #e9e8e4;
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --critical: #d03b3b;
+  --critical-bg: rgba(208, 59, 59, .10);
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz-root {
+    color-scheme: dark;
+    --surface-0: #111110;
+    --surface-1: #1a1a19;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #8f8e86;
+    --grid: #2c2c2a;
+    --track: #2a2a28;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --critical: #e66767;
+    --critical-bg: rgba(230, 103, 103, .14);
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+.viz-root {
+  background: var(--surface-0); color: var(--text-primary);
+  font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, sans-serif;
+  padding: 24px;
+}
+h1 { font-size: 20px; margin: 0 0 4px; }
+h2 { font-size: 15px; margin: 0 0 2px; }
+p.sub { color: var(--text-secondary); margin: 0 0 14px; max-width: 760px; }
+.card { background: var(--surface-1); border-radius: 12px; padding: 16px 18px; margin: 0 0 16px; max-width: 820px; }
+.controls { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; margin: 0 0 16px; max-width: 820px; }
+.controls label { color: var(--text-secondary); display: flex; gap: 8px; align-items: center; }
+select, input[type=range] { accent-color: var(--series-1); }
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; max-width: 820px; margin: 0 0 16px; }
+.tile { background: var(--surface-1); border-radius: 12px; padding: 12px 14px; }
+.tile .label { color: var(--text-secondary); font-size: 13px; }
+.tile .value { font-size: 30px; font-weight: 600; }
+.tile .meta { color: var(--text-muted); font-size: 12px; }
+.meter { height: 8px; border-radius: 4px; background: var(--track); overflow: hidden; margin: 6px 0 4px; }
+.meter > div { height: 100%; border-radius: 4px; background: var(--series-1); }
+.legend { display: flex; gap: 14px; color: var(--text-secondary); font-size: 12px; margin-top: 8px; flex-wrap: wrap; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.status { font-size: 13px; margin-top: 8px; }
+.status .crit { color: var(--critical); font-weight: 600; }
+svg text { fill: var(--text-secondary); font-size: 11px; }
+.tip { position: fixed; pointer-events: none; background: var(--surface-1); color: var(--text-primary);
+  border: 1px solid var(--grid); border-radius: 8px; padding: 8px 10px; font-size: 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.15); display: none; z-index: 10; }
+.tip .row { display: flex; gap: 8px; justify-content: space-between; }
+.note { color: var(--text-muted); font-size: 12px; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="viz-root">
+  <h1>Gauge concepts: pooled subscriptions</h1>
+  <p class="sub">Simulated data. Claude: 3 subscriptions behind cliproxy. Time is 13:20 now. Change the routing
+    mode and burn rate to see how each concept behaves. "%/h" means percent of one account's 5-hour quota per hour.</p>
+
+  <div class="controls">
+    <label>Routing
+      <select id="strategy">
+        <option value="rr">cliproxy round-robin</option>
+        <option value="ff">cliproxy fill-first</option>
+        <option value="head">ocgo-proxy most headroom</option>
+      </select>
+    </label>
+    <label>Burn rate <input id="rate" type="range" min="20" max="180" step="5" value="90"> <span id="rateOut"></span></label>
+  </div>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="card">
+    <h2>A. Pool bar (compact: menubar, statusline, tile)</h2>
+    <p class="sub">One bar = the whole pool's 5-hour quota. Each colored block is one account's remaining share. Ordered so
+      the block that empties next sits on the right and the bar shrinks from there, exposing the next one.</p>
+    <div id="poolbar"></div>
+  </div>
+
+  <div class="card">
+    <h2>B. Ribbons (your thickness idea)</h2>
+    <p class="sub">One lane per account over the next hours. Thickness = remaining quota. A ribbon thins to nothing at its
+      limit and snaps back to full width at its reset.</p>
+    <svg id="ribbons" width="100%" viewBox="0 0 780 150" role="img" aria-label="Per-account remaining quota ribbons"></svg>
+  </div>
+
+  <div class="card">
+    <h2>C. Runway (detail view: stacked bands plus forecast)</h2>
+    <p class="sub">Stacked bands, one per account, total height = pool remaining. Left of "now" is history; right is the
+      forecast at the current burn rate, including the step up at each reset. A red strip marks predicted lockout.</p>
+    <svg id="runway" width="100%" viewBox="0 0 780 260" role="img" aria-label="Pool remaining over time with forecast"></svg>
+    <div class="legend" id="legend"></div>
+    <div class="status" id="status"></div>
+    <div class="note">The real app would measure the burn rate from the last 30-60 minutes of polled usage, not a slider.</div>
+  </div>
+</div>
+<div class="tip" id="tip"></div>
+
+<script>
+const ACCOUNTS = [
+  { id: 'A', name: 'claude-1', color: 'var(--series-1)', weeklyLeft: 39 },
+  { id: 'B', name: 'claude-2', color: 'var(--series-2)', weeklyLeft: 60 },
+  { id: 'C', name: 'claude-3', color: 'var(--series-3)', weeklyLeft: 78 },
+];
+const T0 = 12 * 60 + 20, NOW = 13 * 60 + 20, T1 = NOW + 300, WINDOW = 300;
+const fmt = m => { m = Math.round(m) % 1440; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); };
+
+// Claude-like behaviour: a 5h window starts at the first request after a reset.
+function simulate(strategy, rate) {
+  const st = [ { used: 52, resetAt: 14 * 60 + 10 }, { used: 15, resetAt: 15 * 60 + 35 }, { used: 0, resetAt: null } ];
+  const rows = [], resets = [];
+  for (let t = T0; t <= T1; t++) {
+    st.forEach((s, i) => { if (s.resetAt !== null && t >= s.resetAt) { s.used = 0; s.resetAt = null; resets.push({ t, i }); } });
+    const avail = st.map((s, i) => i).filter(i => st[i].used < 100);
+    rows.push({ t, rem: st.map(s => 100 - s.used), resetAt: st.map(s => s.resetAt), locked: avail.length === 0 });
+    if (!avail.length) continue;
+    let demand = rate / 60;
+    const take = (i, amt) => { const s = st[i]; if (s.resetAt === null) s.resetAt = t + WINDOW; const a = Math.min(amt, 100 - s.used); s.used += a; return a; };
+    if (strategy === 'rr') {
+      let pool = avail.slice();
+      while (demand > 1e-9 && pool.length) {
+        const share = demand / pool.length;
+        pool.forEach(i => { demand -= take(i, share); });
+        pool = pool.filter(i => st[i].used < 100);
+      }
+    } else if (strategy === 'ff') {
+      for (const i of avail) { if (demand <= 1e-9) break; demand -= take(i, demand); }
+    } else {
+      const order = avail.slice().sort((a, b) => st[a].used - st[b].used);
+      for (const i of order) { if (demand <= 1e-9) break; demand -= take(i, demand); }
+    }
+  }
+  return { rows, resets };
+}
+
+const $ = id => document.getElementById(id);
+const tip = $('tip');
+function showTip(ev, html) { tip.innerHTML = html; tip.style.display = 'block'; tip.style.left = (ev.clientX + 14) + 'px'; tip.style.top = (ev.clientY + 14) + 'px'; }
+function hideTip() { tip.style.display = 'none'; }
+const svgEl = (tag, attrs) => { const e = document.createElementNS('http://www.w3.org/2000/svg', tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+
+function render() {
+  const strategy = $('strategy').value, rate = +$('rate').value;
+  $('rateOut').textContent = rate + ' %/h';
+  const { rows } = simulate(strategy, rate);
+  const now = rows.find(r => r.t === NOW);
+  const N = ACCOUNTS.length;
+  const pool5h = now.rem.reduce((a, b) => a + b, 0) / N;
+  const weekly = ACCOUNTS.reduce((a, b) => a + b.weeklyLeft, 0) / N;
+  const nextReset = now.resetAt.map((r, i) => ({ r, i })).filter(x => x.r !== null && now.rem[x.i] < 100).sort((a, b) => a.r - b.r)[0];
+  const lock = rows.find(r => r.t > NOW && r.locked);
+
+  // Tiles
+  $('tiles').innerHTML = `
+    <div class="tile"><div class="label">Claude weekly left · ${N} subs</div><div class="value">${Math.round(weekly)}%</div>
+      <div class="meter"><div style="width:${weekly}%"></div></div><div class="meta">lowest: claude-1 39% · resets Thu 09:00</div></div>
+    <div class="tile"><div class="label">Claude 5-hour left</div><div class="value">${Math.round(pool5h)}%</div>
+      <div class="meter"><div style="width:${pool5h}%"></div></div>
+      <div class="meta">${nextReset ? `next refill ${fmt(nextReset.r)} (+${Math.round((100 - now.rem[nextReset.i]) / N)}% pool)` : 'no refill pending'}</div></div>
+    <div class="tile"><div class="label">At this burn rate</div><div class="value" style="font-size:22px;padding:5px 0">${lock ? 'lockout ' + fmt(lock.t) : 'safe 5h+'}</div>
+      <div class="meta">${lock ? 'all accounts at the 5h limit' : 'refills arrive before the pool empties'}</div></div>`;
+
+  // A. Pool bar: segments ordered so the next-to-empty account is rightmost.
+  const order = ACCOUNTS.map((a, i) => i).sort((a, b) => now.rem[b] - now.rem[a]);
+  const segs = order.filter(i => now.rem[i] > 0).map(i => {
+    const a = ACCOUNTS[i];
+    return `<div data-i="${i}" style="width:calc(${now.rem[i] / N}% - 2px);background:${a.color};height:100%;border-radius:4px;flex:none"></div>`;
+  }).join('');
+  $('poolbar').innerHTML = `
+    <div style="display:flex;gap:2px;height:28px;background:var(--track);border-radius:4px;overflow:hidden" id="pb">${segs}</div>
+    <div style="display:flex;justify-content:space-between;color:var(--text-muted);font-size:12px;margin-top:4px"><span>0</span><span>pool ${Math.round(pool5h)}% left</span><span>100%</span></div>
+    <div class="legend">${order.map(i => `<span><span class="sw" style="background:${ACCOUNTS[i].color}"></span>${ACCOUNTS[i].name} ${Math.round(now.rem[i])}%${now.resetAt[i] !== null ? ' · refills ' + fmt(now.resetAt[i]) : ' · idle (window not started)'}</span>`).join('')}</div>`;
+  $('pb').querySelectorAll('[data-i]').forEach(el => {
+    const i = +el.dataset.i;
+    el.addEventListener('mousemove', ev => showTip(ev, `<b>${ACCOUNTS[i].name}</b><div>${Math.round(now.rem[i])}% of its 5h quota left</div><div>${Math.round(now.rem[i] / N)}% of the pool</div>`));
+    el.addEventListener('mouseleave', hideTip);
+  });
+
+  // Shared x-scale
+  const W = 780, padL = 64, padR = 16;
+  const x = t => padL + (t - T0) / (T1 - T0) * (W - padL - padR);
+  const ticks = []; for (let t = Math.ceil(T0 / 60) * 60; t <= T1; t += 60) ticks.push(t);
+
+  // B. Ribbons
+  const rb = $('ribbons'); rb.innerHTML = '';
+  const laneH = 40;
+  ACCOUNTS.forEach((a, i) => {
+    const mid = 18 + i * laneH + 12;
+    rb.appendChild(svgEl('line', { x1: padL, x2: W - padR, y1: mid, y2: mid, stroke: 'var(--grid)' }));
+    const lbl = svgEl('text', { x: 0, y: mid + 4 }); lbl.textContent = a.name; rb.appendChild(lbl);
+    const top = rows.map(r => `${x(r.t)},${mid - r.rem[i] / 100 * 13}`);
+    const bot = rows.slice().reverse().map(r => `${x(r.t)},${mid + r.rem[i] / 100 * 13}`);
+    rb.appendChild(svgEl('polygon', { points: top.concat(bot).join(' '), fill: a.color }));
+  });
+  rb.appendChild(svgEl('rect', { x: x(NOW), y: 0, width: x(T1) - x(NOW), height: 150, fill: 'var(--surface-1)', opacity: .45 }));
+  rb.appendChild(svgEl('line', { x1: x(NOW), x2: x(NOW), y1: 4, y2: 132, stroke: 'var(--text-secondary)', 'stroke-dasharray': '3 3' }));
+  ticks.forEach(t => { const tx = svgEl('text', { x: x(t), y: 146, 'text-anchor': 'middle' }); tx.textContent = fmt(t); rb.appendChild(tx); });
+  const nl = svgEl('text', { x: x(NOW) + 4, y: 12 }); nl.textContent = 'now'; rb.appendChild(nl);
+
+  // C. Runway: stacked areas. Fixed stack order: C bottom, B middle, A top.
+  const sv = $('runway'); sv.innerHTML = '';
+  const H = 260, padT = 14, padB = 26;
+  const y = v => padT + (1 - v / 100) * (H - padT - padB);
+  [0, 25, 50, 75, 100].forEach(v => {
+    sv.appendChild(svgEl('line', { x1: padL, x2: W - padR, y1: y(v), y2: y(v), stroke: 'var(--grid)' }));
+    const t = svgEl('text', { x: padL - 8, y: y(v) + 4, 'text-anchor': 'end' }); t.textContent = v + '%'; sv.appendChild(t);
+  });
+  ticks.forEach(t => { const tx = svgEl('text', { x: x(t), y: H - 8, 'text-anchor': 'middle' }); tx.textContent = fmt(t); sv.appendChild(tx); });
+  // Lockout strips
+  let start = null;
+  rows.forEach((r, k) => {
+    if (r.locked && start === null) start = r.t;
+    if ((!r.locked || k === rows.length - 1) && start !== null) {
+      sv.appendChild(svgEl('rect', { x: x(start), y: padT, width: Math.max(2, x(r.t) - x(start)), height: H - padT - padB, fill: 'var(--critical-bg)' }));
+      sv.appendChild(svgEl('rect', { x: x(start), y: y(0) - 4, width: Math.max(2, x(r.t) - x(start)), height: 4, fill: 'var(--critical)' }));
+      start = null;
+    }
+  });
+  const stackOrder = [2, 1, 0];
+  const base = rows.map(() => 0);
+  stackOrder.forEach(i => {
+    const lower = base.slice();
+    rows.forEach((r, k) => { base[k] += r.rem[i] / N; });
+    const pts = rows.map((r, k) => `${x(r.t)},${y(base[k])}`).concat(rows.slice().reverse().map((r, k) => `${x(r.t)},${y(lower[rows.length - 1 - k])}`));
+    sv.appendChild(svgEl('polygon', { points: pts.join(' '), fill: ACCOUNTS[i].color, stroke: 'var(--surface-1)', 'stroke-width': 1.5 }));
+  });
+  sv.appendChild(svgEl('rect', { x: x(NOW), y: padT, width: x(T1) - x(NOW), height: H - padT - padB, fill: 'var(--surface-1)', opacity: .4 }));
+  sv.appendChild(svgEl('line', { x1: x(NOW), x2: x(NOW), y1: padT, y2: H - padB, stroke: 'var(--text-secondary)', 'stroke-dasharray': '3 3' }));
+  const nl2 = svgEl('text', { x: x(NOW) + 4, y: padT + 10 }); nl2.textContent = 'now · forecast →'; sv.appendChild(nl2);
+  // Crosshair + tooltip
+  const cross = svgEl('line', { y1: padT, y2: H - padB, stroke: 'var(--text-primary)', opacity: 0 }); sv.appendChild(cross);
+  const hit = svgEl('rect', { x: padL, y: 0, width: W - padL - padR, height: H, fill: 'transparent' }); sv.appendChild(hit);
+  hit.addEventListener('mousemove', ev => {
+    const box = sv.getBoundingClientRect();
+    const px = (ev.clientX - box.left) / box.width * W;
+    const t = Math.round(T0 + (px - padL) / (W - padL - padR) * (T1 - T0));
+    const r = rows[Math.max(0, Math.min(rows.length - 1, t - T0))];
+    cross.setAttribute('x1', x(r.t)); cross.setAttribute('x2', x(r.t)); cross.setAttribute('opacity', .35);
+    const pool = r.rem.reduce((a, b) => a + b, 0) / N;
+    showTip(ev, `<b>${fmt(r.t)}${r.t > NOW ? ' (forecast)' : ''}</b><div class="row"><span>pool</span><b>${Math.round(pool)}%</b></div>` +
+      ACCOUNTS.map((a, i) => `<div class="row"><span><span class="sw" style="background:${a.color}"></span>${a.name}</span><span>${Math.round(r.rem[i])}%</span></div>`).join('') +
+      (r.locked ? '<div style="color:var(--critical)">all accounts limited</div>' : ''));
+  });
+  hit.addEventListener('mouseleave', () => { cross.setAttribute('opacity', 0); hideTip(); });
+
+  $('legend').innerHTML = ACCOUNTS.map(a => `<span><span class="sw" style="background:${a.color}"></span>${a.name}</span>`).join('') +
+    '<span><span class="sw" style="background:var(--critical)"></span>predicted lockout</span>';
+  if (lock) {
+    const end = rows.find(r => r.t > lock.t && !r.locked);
+    $('status').innerHTML = `<span class="crit">⚠ Lockout predicted ${fmt(lock.t)}${end ? '–' + fmt(end.t) : ''}</span> at ${rate} %/h. ${end ? 'First account refills at ' + fmt(end.t) + '.' : ''}`;
+  } else {
+    $('status').innerHTML = `✓ No lockout in the next 5 hours at ${rate} %/h.`;
+  }
+}
+$('strategy').addEventListener('change', render);
+$('rate').addEventListener('input', render);
+render();
+</script>
+</body>
+</html>
