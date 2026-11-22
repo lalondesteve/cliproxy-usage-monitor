@@ -21,15 +21,17 @@ struct OcgoSourceT1Tests {
         #expect(snapshot.routing?.strategy == .mostHeadroom)
         #expect(snapshot.routing?.forcedAccount == nil)
 
-        #expect(snapshot.readings.map(\.usedPercent) == [52, 40, 64])
-        #expect(snapshot.readings.allSatisfy { $0.window == .fiveHour && $0.source == .ocgo && $0.provider == .go })
+        // T7 also reads weekly and monthly; this test keeps to the 5-hour window.
+        let fiveHour = snapshot.readings.filter { $0.window == .fiveHour }
+        #expect(fiveHour.map(\.usedPercent) == [52, 40, 64])
+        #expect(snapshot.readings.allSatisfy { $0.source == .ocgo && $0.provider == .go })
 
-        let a = try #require(snapshot.readings.first { $0.fileKey == "team-a" })
+        let a = try #require(fiveHour.first { $0.fileKey == "team-a" })
         #expect(abs(a.observedAt.timeIntervalSince(date("2026-11-22T11:58:30.123Z"))) < 0.001)
         #expect(a.resetsAt == date("2026-11-22T14:10:00Z"))
-        let b = try #require(snapshot.readings.first { $0.fileKey == "team-b" })
+        let b = try #require(fiveHour.first { $0.fileKey == "team-b" })
         #expect(b.resetsAt == date("2026-11-22T15:30:00Z"))
-        let c = try #require(snapshot.readings.first { $0.fileKey == "team-c" })
+        let c = try #require(fiveHour.first { $0.fileKey == "team-c" })
         #expect(c.resetsAt == nil, "Go zero time means unset")
         #expect(snapshot.accounts.first?.polledAt == a.observedAt)
         #expect(snapshot.accounts.allSatisfy { $0.pollError == nil })
