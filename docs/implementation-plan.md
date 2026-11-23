@@ -584,8 +584,8 @@ checks the combined behavior.
   hand calculation from a capture taken in the same minute. If openusage is
   installed, its unified Claude row is a second check, allowing for its "earliest
   reset" rule.
-- The manual checks from plan.md Phase 2: Compact expands for 3 s and a second click
-  opens the dropdown; key and token survive a relaunch; without ocgo the Go row is
+- The manual checks from plan.md Phase 2: a Compact click expands the item for 3 s
+  and opens the dropdown; key and token survive a relaunch; without ocgo the Go row is
   hidden. Plus: a wrong key gives one 401 and then silence (watch the proxy log or a
   local stub).
 - Depends on: T3 to T9c, P0.1, P0.3.

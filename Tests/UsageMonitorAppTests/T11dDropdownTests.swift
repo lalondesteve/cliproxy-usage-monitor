@@ -103,7 +103,7 @@ struct T11dDropdownTextTests {
 }
 
 /// Renders the dropdown with forecasts to build/review/T11d/ for review, and checks
-/// the forecast lines take room under the rows (no new chart).
+/// the forecasts add no lines under the rows (they live in the hover card).
 @Suite("T11d dropdown snapshots")
 @MainActor
 struct T11dDropdownSnapshotTests {

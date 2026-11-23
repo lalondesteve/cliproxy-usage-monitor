@@ -135,7 +135,7 @@ struct T9bDropdownTests {
         let allBars = [row.fiveHour, row.weekly, row.monthly].compactMap { $0 }.flatMap(\.bars)
         #expect(!allBars.contains { $0.alias == "codex-2" })
 
-        let view = ProviderRowView(row: row, clock: E.clock, sourceStatus: .ok(at: E.now))
+        let view = ProviderRowView(row: row, clock: E.clock)
         let section = view.hover.sections.first { $0.title.hasPrefix("Unclassified") }
         let line = section?.lines.first
         #expect(line?.label == "codex-2")
@@ -237,8 +237,6 @@ struct T9bDropdownTests {
         #expect(failing.text == "cliproxy: unreachable since 13:02, retrying")
         #expect(failing.severity == .warning)
         #expect(DropdownText.sourceStatus(.ocgo, .notConfigured, c).text == "ocgo: not configured")
-        #expect(DropdownText.sourceProblem(.cliproxy, .authStopped(.ipBanned)) == "cliproxy stopped: IP banned")
-        #expect(DropdownText.sourceProblem(.ocgo, .ok(at: E.now)) == nil)
         #expect(DropdownText.source(for: .go) == .ocgo)
         #expect(DropdownText.source(for: .codex) == .cliproxy)
     }

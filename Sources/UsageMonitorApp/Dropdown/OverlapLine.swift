@@ -50,7 +50,11 @@ func overlapRects(bars: [GaugeBar], width: CGFloat) -> [OverlapRect] {
 /// Where the weekly pace marker goes; nil when the gauge has no pace (monthly, or
 /// hidden by the weekly rule).
 func paceX(_ gauge: WindowGauge?, width: CGFloat) -> CGFloat? {
-    gauge?.pace.map { width * CGFloat(min(max($0, 0), 1)) }
+    paceX(gauge?.pace, width: width)
+}
+
+func paceX(_ pace: Double?, width: CGFloat) -> CGFloat? {
+    pace.map { width * CGFloat(min(max($0, 0), 1)) }
 }
 
 /// One window's line, recessed as a groove (user, 2026-11-23, mockup C): a darker
@@ -94,12 +98,13 @@ struct OverlapLineView: View {
                                                endPoint: CGPoint(x: 0, y: inner.minY + 2)))
             context.stroke(Path(channel.insetBy(dx: rim / 2, dy: rim / 2)),
                            with: .color(palette.grooveRim), lineWidth: rim)
-            for (rect, style) in ticks { context.fill(Path(rect), with: .color(palette.fill(style))) }
-            if let pace {
-                let x = inner.minX + inner.width * CGFloat(min(max(pace, 0), 1))
+            // The pace goes under the seat ticks: near the end of a week it sits at 0,
+            // where an empty seat's tick must stay visible. It is taller, so both show.
+            if let x = paceX(pace, width: inner.width).map({ inner.minX + $0 }) {
                 let tick = CGRect(x: min(max(x - 1, 0), size.width - 2), y: 0, width: 2, height: size.height)
                 context.fill(Path(tick), with: .color(palette.textPrimary))
             }
+            for (rect, style) in ticks { context.fill(Path(rect), with: .color(palette.fill(style))) }
         }
         .frame(height: Self.height)
         .accessibilityElement()

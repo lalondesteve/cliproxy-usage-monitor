@@ -25,8 +25,7 @@ struct DropdownView: View {
         VStack(alignment: .leading, spacing: 14) {
             if let model, !model.rows.isEmpty {
                 ForEach(model.rows, id: \.provider) { row in
-                    ProviderRowView(row: row, clock: clock,
-                                    sourceStatus: model.sources[DropdownText.source(for: row.provider)])
+                    ProviderRowView(row: row, clock: clock)
                 }
             } else {
                 Text(model == nil ? "Loading…" : "No data yet")
@@ -46,7 +45,6 @@ struct DropdownView: View {
 struct ProviderRowView: View {
     let row: ProviderRow
     let clock: DropdownClock
-    let sourceStatus: SourceStatus?
     @State private var hovering = false
     @Environment(\.colorScheme) private var scheme
 
@@ -78,10 +76,10 @@ struct ProviderRowView: View {
     }
 
     /// Under the line: "2 of 3 known · 3m ago" on the left (it may wrap), "reset
-    /// in …" on the right (never truncated); a source in trouble gets its own line.
+    /// in …" on the right (never truncated). A source in trouble shows once, in the
+    /// footer, not under each of its rows.
     private func auxLine(palette: DropdownPalette) -> some View {
         let five = row.fiveHour
-        let problem = DropdownText.sourceProblem(DropdownText.source(for: row.provider), sourceStatus)
         return VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 if let left = knownAndFreshness(five, palette: palette) {
@@ -92,7 +90,6 @@ struct ProviderRowView: View {
                     Text(countdown).lineLimit(1).fixedSize().layoutPriority(1)
                 }
             }
-            if let problem { Text(problem).foregroundStyle(palette.warning) }
         }
         .font(.system(size: 11).monospacedDigit())
         .foregroundStyle(palette.textMuted)

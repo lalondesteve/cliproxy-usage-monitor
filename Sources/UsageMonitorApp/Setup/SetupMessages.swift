@@ -9,9 +9,9 @@ enum SetupMessages {
         case .unauthorized:
             switch kind {
             case .cliproxy:
-                "Wrong management key (HTTP 401). Double-check it before retrying: 5 failed attempts ban this Mac's IP for 30 minutes."
+                "Wrong management key. Double-check it before retrying: 5 failed attempts ban this Mac's IP for 30 minutes."
             case .ocgo:
-                "Wrong client token (HTTP 401). Check the token and try again."
+                "Wrong client token. Check the token and try again."
             }
         case .remoteManagementDisabled:
             "Remote management is disabled on cliproxy. Set remote-management.allow-remote to true (block the management paths at the public ingress first), then try again."

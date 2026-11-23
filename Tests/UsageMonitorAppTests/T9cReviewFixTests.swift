@@ -349,6 +349,25 @@ struct T9cOverlapTests {
         #expect(m.testState(.cliproxy) == .failed(timeoutText))
     }
 
+    /// An older success that lands after a newer 401 must not clear the rejection, or
+    /// the next Test would skip the lockout confirmation.
+    @Test func lateOlderSuccessKeepsANewerRejection() async throws {
+        let poll = T9cSuspendingPollControl()
+        let m = try model(T9cFakeSecretStore([.cliproxyKey: "old-key"]), poll, T9cDefaults())
+        await m.load()
+        let first = Task { await m.test(.cliproxy) }
+        try await t9cWait("first test sent") { await poll.waiting == 1 }
+        m.form.cliproxyKey.value = "new-key"
+        let second = Task { await m.test(.cliproxy) }
+        try await t9cWait("second test sent") { await poll.waiting == 2 }
+        await poll.finish(1, with: .failure(.unauthorized))
+        await second.value
+        await poll.finish(0, with: .success("3 credentials"))
+        await first.value
+        #expect(m.cliproxyRejections == 1)
+        #expect(m.confirmsTest(.cliproxy))
+    }
+
     @Test func resultForEditedFieldsIsHidden() async throws {
         let poll = T9cSuspendingPollControl()
         let m = try model(T9cFakeSecretStore([.cliproxyKey: "old-key"]), poll, T9cDefaults())

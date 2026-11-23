@@ -156,15 +156,6 @@ enum DropdownText {
         }
     }
 
-    /// Short form for a provider row whose source isn't polling normally.
-    static func sourceProblem(_ k: SourceKind, _ s: SourceStatus?) -> String? {
-        switch s {
-        case .authStopped(let e)?: "\(sourceName(k)) stopped: \(error(e))"
-        case .failing(let e, _)?: "\(sourceName(k)) \(error(e))"
-        default: nil
-        }
-    }
-
     // MARK: Forecast (plan.md "Forecast": text only)
 
     /// The 5-hour lockout forecast: "safe for 5h", "lockout at 17:09 to 17:20", or why

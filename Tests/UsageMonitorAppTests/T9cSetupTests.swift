@@ -24,7 +24,6 @@ struct T9cMessageTests {
             switch error {
             case .unauthorized:
                 #expect(text.contains("Wrong management key"))
-                #expect(text.contains("401"))
                 #expect(text.contains("5 failed attempts"))
             case .remoteManagementDisabled:
                 #expect(text.contains("allow-remote"))
@@ -60,7 +59,6 @@ struct T9cMessageTests {
     @Test func ocgoRejectedTokenDoesNotMentionTheBan() {
         let text = SetupMessages.sentence(for: .unauthorized, kind: .ocgo)
         #expect(text.contains("Wrong client token"))
-        #expect(text.contains("401"))
         #expect(!text.contains("ban"))
         #expect(!text.contains("failed attempts"))
     }

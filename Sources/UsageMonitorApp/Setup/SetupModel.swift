@@ -129,10 +129,12 @@ final class SetupModel {
         case .success(let config):
             tests[kind] = TestRecord(state: .running, input: input)
             let result = await saver.pollControl.test(kind, config)
-            // The request reached the server, so it counts even if the form moved on.
+            // The request reached the server, so a rejection counts even if the form
+            // moved on. Only the newest Test clears the count: an older success arriving
+            // late must not erase a newer rejection.
             if kind == .cliproxy {
                 switch result {
-                case .success: cliproxyRejections = 0
+                case .success: if generation == testGenerations[kind] { cliproxyRejections = 0 }
                 case .failure(.unauthorized): cliproxyRejections += 1
                 case .failure: break
                 }
