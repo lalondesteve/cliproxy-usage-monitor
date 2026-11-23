@@ -35,15 +35,16 @@ notes below are from upstream `6eb8554` (2026-11-23) except where marked "fork".
 
 | What | Route | Notes |
 |---|---|---|
-| Credential list | `GET /v8/management/credentials` (or `/v0/management/auth-files`) | Per account: `auth_index`, `provider`, `email`, `disabled`, `unavailable`, `status`, `success`/`failed`, `recent_requests` (20 buckets of 10 min), and `quota.signals` + `quota.observed_at` |
+| Credential list | `GET /v8/management/credentials` (or `/v0/management/auth-files`) | Per account: `auth_index`, `provider`, `email`, `disabled`, `unavailable`, `status`, `success`/`failed`, `recent_requests` (20 buckets of 10 min), and `quota.signals` + `quota.observed_at`. As captured (P0.3): the list is `{"files": [...], "observed_at"}`; `priority` and `weight` appear only when set; a quota-blocked credential has `unavailable: true`, `quota_blocked: true`, `status: "error"`, `next_retry_after` and a `cooldowns[]` entry with `scope: "credential"` and the same `retry_at` (model-scope entries sit beside it); `model_quotas.<model>` keeps older per-model copies of the signals, and `quota` is the newest of them. Other providers (`antigravity`) are listed too and skipped. |
 | Passive quota | inside the list, `quota.signals` | Copied from response headers on real traffic: Claude `Anthropic-Ratelimit-Unified-5h-Utilization`, `-7d-Utilization`, `-5h-Reset`, `-7d-Reset`, `-Status`; Codex `X-Codex-Primary-Used-Percent`, `-Window-Minutes`, `-Reset-At`, `-Reset-After-Seconds`, `X-Codex-Secondary-*`, plan type. Free to read and current while an account carries traffic. See "Reading passive signals" below. |
 | Active quota | `POST /v8/management/requests/api-call` | Calls a provider URL with the stored token (`$TOKEN$` placeholder). Claude: `GET https://api.anthropic.com/api/oauth/usage` with `anthropic-beta: oauth-2025-04-20` returns `five_hour`, `seven_day` (each `utilization` 0-100, `resets_at` RFC 3339). Model-scoped weekly limits (`seven_day_opus`, `seven_day_sonnet`, or `limits[]` with `kind: "weekly_scoped"`) aren't on our plans and are ignored. Codex: `GET https://chatgpt.com/backend-api/wham/usage` with `Chatgpt-Account-Id` returns `rate_limit.primary_window` / `secondary_window` (`used_percent`, `limit_window_seconds`, `reset_at`), `plan_type`. It does not refresh the token, so expect occasional 401s. |
-| Fork's quota poller | fork: `GET /v8/management/quota/history`, `POST /v8/management/quota/refresh` (not under `/v0`) | Fork's `internal/quota` starts on boot and polls Claude and Codex `usage` every 300 s by default. Its `pools[]` don't follow our pool rules: one entry per credential file with no dedupe, `remaining` null as soon as one account is stale, `knownRemaining` a sum rather than a mean, no weekly-blocked exclusion, and provider `"anthropic"` where the credential list says `"claude"`. Read only per-account data and compute everything else in the app: the latest reading from `accounts[].reading.windows` (values are remaining %, not used %), and past readings from `pools[].history[].accounts[]` (`id`, `status`, `remaining`, `observedAt`, `resetAt`) with an explicit `?range=` (1h to 720h, default 24h). Each observation is written into both the `short` and the `weekly` pool, and knots carry earlier readings forward, so dedupe by `(id, provider, pool window, observedAt)` and keep only `status: "ok"` entries with a `remaining`. The route answers 200 even when the poller is off; a provider whose accounts show `status: "paused"` has no fork history. Join to the credential list by `account.id`, mapping `"anthropic"` to `"claude"`. |
+| Fork's quota poller | fork: `GET /v8/management/quota/history`, `POST /v8/management/quota/refresh` (not under `/v0`) | Fork's `internal/quota` starts on boot and polls Claude and Codex `usage` every 300 s by default. Its `pools[]` don't follow our pool rules: one entry per credential file with no dedupe, `remaining` null as soon as one account is stale, `knownRemaining` a sum rather than a mean, no weekly-blocked exclusion, and provider `"anthropic"` where the credential list says `"claude"`. Read only per-account data and compute everything else in the app: the latest reading from `accounts[].reading.windows` (values are remaining %, not used %), and past readings from `pools[].history[].accounts[]` (`id`, `status`, `remaining`, `observedAt`, `resetAt`) with an explicit `?range=` (1h to 720h, default 24h). Each observation is written into both the `short` and the `weekly` pool, and knots carry earlier readings forward, so dedupe by `(id, provider, pool window, observedAt)` and keep only `status: "ok"` entries with a `remaining`. The route answers 200 even when the poller is off; a provider whose accounts show `status: "paused"` has no fork history. Join to the credential list by `account.id`, mapping `"anthropic"` to `"claude"`. As captured (P0.3, served live with 200): each `accounts[]` entry nests `id`, `provider`, `enabled` under `account`, beside `status`, `lastAttempt`, `lastSuccess`, `nextAttempt` and `reading`; the reading's time is `reading.at`, and `reading.windows` is an array of `{id: "short" or "weekly", durationSeconds: 18000 or 604800, remaining, resetAt, resetKind}`. Timestamps have up to 9 fractional digits, and Go's zero time stands for unset. API-key credentials appear as `claude:apikey:<12 hex>` with status `"unsupported"` or `"removed"` and no reading; they aren't in the credential list and don't count when deciding whether a provider is paused (a provider with only such accounts gets no fork state). History entries also show `"unsupported"`, `"added"` and `"stale_or_unsupported"`; a carried-forward entry turns `"stale_or_unsupported"` once its `resetAt` passes, and the dedupe keeps its earlier `"ok"` copy when there is one; an observation first written after its `resetAt` has none and is dropped. Top-level `events[]` (credentials added and removed) is ignored. |
 
 Reading passive signals:
 
 - Header names are stored canonicalized (`http.CanonicalHeaderKey`). Match them
-  case-insensitively.
+  case-insensitively. Every value in the P0.3 capture is a single JSON string
+  (`"0.31"`, `"1795417200"`), not a string array.
 - Claude utilization is a fraction (0.53, and it can exceed 1.0). Multiply by 100 and
   clamp to 0-100. Claude resets are Unix epoch seconds.
 - Codex window length comes from `-Window-Minutes` (300 = 5 hours, 10080 = weekly).
@@ -71,18 +72,30 @@ to the internet. Block those paths at the public ingress first; the app uses the
 NetBird address.
 
 Identity for deduplication, using listing fields only (never download auth files;
-they hold tokens):
+they hold tokens). An account is a seat: the provider's key plus the email. Team
+seats share the key but each has its own quota, so the key alone would count them
+once.
 
-- Claude: the 8-hex hash in the credential name `claude-<hash>-<email>.json`. It is
-  the SHA-256 of `organization_uuid`, or of `account_uuid` when there is no
-  organization, so two organizations under one email stay separate. Legacy names
-  `claude-<email>.json` fall back to the email. Until cliproxy migrates it, a legacy
-  file and a hashed file for the same subscription (or an account-hashed file and its
-  organization-hashed successor) get different keys and would count twice. Phase 0
-  checks for such pairs; confirmed ones go into an alias list in the app's settings.
-- Codex: `chatgpt_account_id` (in `id_token`).
+- Claude: the 8-hex hash in the credential name `claude-<hash>-<email>.json`, plus
+  the email. The hash is the SHA-256 of `organization_uuid`, or of `account_uuid`
+  when there is no organization, so it names the organization and the email names
+  the seat in it. Legacy names `claude-<email>.json` use the email alone. Until
+  cliproxy migrates it, a legacy file and a hashed file for the same login (or an
+  account-hashed file and its organization-hashed successor) get different
+  identities and would count twice. Phase 0 checks for such pairs; confirmed ones go
+  into an alias list in the app's settings. An alias entry names the other file's
+  identity, or just its key (`1a2b3c4d`), which means that key plus this file's
+  email.
+- Codex: `chatgpt_account_id` (in `id_token`), plus the email. Without an account id,
+  the email alone.
 - OpenCode Go: the account name. Each one is assumed to be a separate workspace;
   Phase 0 checks it.
+
+Decided on 2026-11-23 (see "P0.4 as captured" and Decisions): the capture shows team
+seats sharing a Claude hash or a Codex `chatgpt_account_id` with separate quotas.
+Before that, identity was the key alone. T4b made the change; a database from an
+earlier build still loads, and each key-only alias and color goes to the first seat
+with that key.
 
 Routing: `routing.strategy` is `round-robin` (default), `weighted-round-robin` or
 `fill-first`. Read it from `GET /v0/management/routing/strategy`, which returns the
@@ -93,6 +106,13 @@ wins, default 0) apply under every strategy. `weight` (default 1) applies to
 `weighted-round-robin`, where `weight <= 0` takes a credential out of rotation, so
 it counts as unavailable. All of them change which account takes traffic, so the
 forecast needs them.
+
+A quota-blocked credential (`unavailable: true`) counts as cooling down until the
+latest of its `next_retry_after` and credential-scope `cooldowns[].retry_at` while
+that time is still ahead, so Pool rule 5 can place its refill. With no retry time
+ahead it stays unavailable with no known end. When every enabled credential of an
+account is blocked, the account comes back with the credential whose end is
+earliest; only when none has a known end does it carry all their reasons.
 
 ### ocgo-proxy (OpenCode Go)
 
@@ -118,7 +138,11 @@ Reading the status:
   `percent` is 0 until then, which would otherwise read as full.
 - After a failed poll, ocgo keeps the last good windows and their `polled_at`, and
   sets `poll_error`. Show that reading with its age.
-- Read a window's `percent` (used %) only when its `status` is `"ok"`.
+- Read a window's `percent` (used %) only when its `status` is `"ok"` or
+  `"rate-limited"`. The P0.3 capture shows `"rate-limited"` on a window at its limit
+  (team-a monthly: `percent` 100, `resets_at` equal to the account's
+  `exhausted_until`); that is a reading, and skipping it would make the window
+  unknown. Other statuses are still ignored.
 - A window past its `resets_at` keeps its old percent. Treat it as Pool rule 3 says.
 - "Usable now" follows `available`; `exhausted`, `exhausted_until` and
   `cooldown_until` say why and until when. While `forced_account` is set, only that
@@ -146,7 +170,8 @@ subscription within a provider has the same plan.
 
 1. **Pool remaining** per provider and window = mean of `100 - used%` over unique,
    enabled accounts. Same capacity per account, so the mean is the pool share.
-2. **Deduplicate** accounts by identity (see Data sources), not by credential file.
+2. **Deduplicate** accounts by identity, the seat (see Data sources), not by credential
+   file. Two files for one seat count once; two seats sharing a key count twice.
 3. **Unknown stays unknown.** An account is unknown when it has never been read or
    its only readings failed. It is never counted as 0% or 100%. With unknown
    accounts the pooled number becomes a range, with each unknown at 0% and then at
@@ -170,9 +195,12 @@ subscription within a provider has the same plan.
    weekly, Go weekly or monthly) or otherwise unavailable (cliproxy `unavailable`,
    ocgo `available: false`, cooling down, or not the `forced_account`) still shows its
    5-hour quota. In the
-   5-hour gauge, grey it out and count it as 0 in "usable now". The menubar % and
+   5-hour gauge, count it as 0 in "usable now" and draw it as a vertical tick at 0 in
+   its own color, as for a seat with nothing left (no grey anywhere; decided
+   2026-11-23). The weekly and monthly lines are overlap lines too, one bar per seat,
+   in the account colors #ff9e64, #7aa2f7, #9ece6a, #bb9af7. The menubar % and
    the number beside the 5-hour line are the usable share; when it differs from the
-   raw quota, the dropdown shows both ("usable 30%, quota 55%").
+   raw quota, the row's hover card shows both ("usable 30%, quota 55%").
 5. **Next refill vs full recovery.** Accounts reset at different times. Report the
    next refill ("14:10, +27% of pool") and do not invent one pool reset time. The
    next refill is the first moment usable quota rises: evaluate it at each known
@@ -196,7 +224,7 @@ Mockup: [docs/mockups/gauges-overlap.html](mockups/gauges-overlap.html), option 
   subscription, the pooled % as the number beside the line, and under it, bottom
   right, the time left before the next reset ("reset in 1h 35m", the next refill as
   Pool rule 5 defines it, which also covers the case where every non-full
-  subscription is blocked; "reset in 5h" when every subscription is full, since a new
+  subscription is blocked; "reset in 5h" when every enabled subscription has full, usable 5-hour quota, since a new
   window starts with the next request). Hover gives each subscription's %, refill
   time and freshness.
 - Menubar: no line. Each provider's monochrome logo and its pooled 5-hour usable %
@@ -208,8 +236,8 @@ Mockup: [docs/mockups/gauges-overlap.html](mockups/gauges-overlap.html), option 
   - Normal: logos and % as above, always shown.
   - Compact: one 16 px icon, the three-spoke node glyph `assets/icons/compact.svg`
     (generated by `scripts/glyphs.py`; ring and 4-arm versions were rejected). Clicking it expands the
-    item into the normal logos and % for 3 s, then it collapses. A second click while
-    expanded opens the dropdown. Mockup: `docs/mockups/gauges-overlap.html`.
+    item into the normal logos and % for 3 s and opens the dropdown at the same time,
+    then the item collapses. A click while expanded toggles the dropdown. Mockup: `docs/mockups/gauges-overlap.html`.
 - Known tradeoffs: the line reaches the fullest subscription while the number is
   the pooled average; colors swap places when two subscriptions cross.
 
@@ -267,8 +295,11 @@ account has usage but no reset time, the marker is hidden.
   affinity on, for example), show no lockout forecast.
 - Weekly run-out: each account's own weekly burn rate, extrapolated linearly to that
   account's weekly reset. Separate from the 5-hour simulation.
-- Outputs, shown as text in the dropdown only: "lockout at 17:09 to 17:20", "safe
-  for 5h", "weekly runs out Wed 18:00, resets Thu 09:00".
+- Outputs, shown as text in the row's hover card only: "lockout at 17:09 to 17:20",
+  "safe for 5h", "weekly runs out Wed 18:00, resets Thu 09:00". The dropdown rows
+  carry only the lines, the numbers, "N of M known", the reading's age ("7m ago") and
+  "reset in …" (decided 2026-11-23); a source line appears below them only while a
+  source is failing or stopped.
 - History is chosen per provider. Claude and Codex use the fork's `quota/history`
   when the VM serves it and that provider isn't paused. On startup and wake the app
   fetches from its last stored observation (at least 1h, at most 720h back), so
@@ -361,8 +392,82 @@ shapes, not as proof that they work against our fork:
 |---|---|---|
 | 0. Verify | First, check whether the public ingress forwards `/v0/management/*` and `/v8/management/*`, and whether `allow-remote` is already on; block the paths at the ingress before enabling it. Read the fork's source on thearch (`internal/quota`, routes, listing fields). Check that the live VM serves `GET /v8/management/quota/history` with per-account windows. Call the management API and `/_ocgo/status` once from the Mac and save sanitized samples as test fixtures. Record the routing strategy, weights, priority tiers, session affinity and ocgo `forced_account`. Check that Go account names are distinct workspaces, and look for Claude credential pairs that are the same subscription (legacy and hashed names). Separately, replay T3's `auth-files` and `api-call` requests by hand to find why T3 showed no usage (route, `allow-remote`, TLS, or the provider refusing), and record the live `oauth/usage` and `wham/usage` payloads if they come back. | Management paths unreachable through the public ingress; fixtures for every payload Phase 1 reads (credential list, `quota/history` if served, `/_ocgo/status`, routing and config); per-account windows available from passive signals or `quota/history`. Phase 1 can start then. Turning on active calls waits for the T3 failure to be explained and for `api-call` fixtures |
 | 1. Core | Swift package: cliproxy and ocgo sources, normalization, dedupe, pool rules, SQLite history. Tests from the fixtures (equal-capacity pooling, duplicates, unknown accounts as a range, old readings and windows past their reset, Claude fraction units, a snapshot missing a window, zero-time resets, a Codex window with no length, blocked and unavailable accounts, an ocgo forced account, staggered resets, disabled accounts). | Pooled values match hand-computed ones on the fixtures; a test shows a 401 stops all cliproxy polling; SQLite history survives a restart and drops rows older than 30 days |
-| 2. Menubar app | Setup screen, Normal/Compact menubar item, dropdown with the overlap line (E) for 5-hour and weekly, reset countdowns, weekly pace, hover detail, freshness. | Runs on the Mac against the live proxies, and by hand: Compact expands for 3 s and a second click opens the dropdown; key and token survive a relaunch from the Keychain; without ocgo the Go row is hidden |
+| 2. Menubar app | Setup screen, Normal/Compact menubar item, dropdown with the overlap line (E) for 5-hour and weekly, reset countdowns, weekly pace, hover detail, freshness. | Runs on the Mac against the live proxies, and by hand: a Compact click expands it for 3 s and opens the dropdown at once; key and token survive a relaunch from the Keychain; without ocgo the Go row is hidden |
 | 3. Forecast | Burn rate, 5-hour simulation and weekly run-out, shown as text in the dropdown. | Backtest per provider on the fork's history or the app's own. For routing the simulation models: a lockout and recovery reproduced within 15 min, and no lockout predicted for a stretch when the usable pool stayed above 0; if the history has no lockout, a timestamped fixture with a labeled lockout and recovery stands in. For routing it doesn't model (session affinity on): a test shows the lockout forecast is withheld |
+
+### Phase 0 findings (capture of 2026-11-23T03:16:02Z)
+
+From the sanitized capture in `Tests/UsageCoreTests/Fixtures/live/`. Facts only,
+except where marked "inferred".
+
+Assumptions from `implementation-plan.md`:
+
+- Payload shapes: the credential list, routing, config and ocgo status match this
+  plan apart from the details added under Data sources. The fork's `quota/history`
+  differs: account fields sit under `account`, readings are dated by `reading.at`,
+  and windows are an array (see the cliproxy table).
+- `quota.signals` values are plain strings.
+- `quota/history`'s `account.id` equals the credential list's `id` for all five
+  OAuth credentials. API-key ids (`claude:apikey:...`) appear only in
+  `quota/history`.
+- `success` and `failed` look cumulative (claude-ea14e983: 5712 and 34, against 167
+  requests in its 20 `recent_requests` buckets). One capture can't show what a
+  restart does, so that stays open.
+- 403 bodies weren't captured; still open.
+- The VM serves `GET /v8/management/quota/history?range=24h` (200), and
+  `/v0/management/routing/strategy` and `/v0/management/config` answer 200.
+
+Other observations:
+
+- The fork's Claude `resetAt` has sub-second noise (`2026-11-23T07:00:00.3971Z`
+  where the header says `1795417200`, 07:00:00Z), well inside the burn rate's 60 s
+  tolerance.
+- Fork readings and passive signals of the same window agree within a couple of
+  points: codex user-3 shows 74% used in the 5-hour window and 24% weekly in both,
+  codex user-2's 5-hour window is 6% in the fork and 4% passive, and claude user-4's
+  weekly is 31% in the fork and 30% passive. Neither source is always the older one:
+  user-2's passive reading (03:12:44) predates the fork's (03:15:11), while user-4's
+  (03:16:02) is newer than the fork's (03:12:14).
+- Go: `headroom` is 100 minus the highest window percent (team-a 0, team-b 33,
+  extra 89). An unused `rolling` window at 0% reports `resets_at` 5 hours after
+  `polled_at` (team-a: polled 03:14:11.57, resets 08:14:11.53), so (inferred) its
+  reset moves with every poll, which the burn rate's "0% with an unset reset" case
+  doesn't cover. `weekly` resets at 2026-11-30T00:00:00Z (a Monday) for all three
+  accounts. Apart from extra's rolling window at 2%, only the monthly windows show
+  use; team-b's monthly reset differs from the other two.
+
+### P0.4 as captured
+
+- Routing strategy: `weighted-round-robin` (`routing/strategy`, and
+  `routing.strategy` in the config).
+- Session affinity: on, `session-affinity-ttl: "4h"`. Per Forecast, routing the
+  simulation doesn't model gets no lockout forecast, so T11b withholds it for
+  Claude and Codex while affinity stays on. Burn rate and weekly run-out still show.
+  Go routes by most headroom, has no affinity, and keeps its lockout forecast.
+- Weights: only claude-ea14e983-user-4 sets one (`weight: 1`); the others default
+  to 1. No credential is out of rotation.
+- Priorities: Claude ea14e983-user-4 10, f5ae9dff-user-1 0, f5ae9dff-user-5 -10;
+  Codex 85e5a20c-user-2 10, 85e5a20c-user-3 0. Each tier holds one credential, so
+  (inferred) traffic goes to the highest-priority usable credential and weights
+  don't matter yet. At capture time f5ae9dff-user-1 and -user-5 were quota-blocked
+  until 04:20:12Z and 03:20:07Z.
+- ocgo `forced_account`: the key is absent from `/_ocgo/status`, which the parser
+  reads as not forced. The status can't tell "not forced" from "not reported".
+- Go accounts: `team-a`, `team-b`, `extra`. At the same poll their monthly use
+  differs (100% and rate-limited, 67%, 11%), so they are separate quotas (inferred:
+  separate workspaces). team-a and extra share the monthly reset
+  2026-11-30T21:54:01Z to the second.
+- Claude pair: claude-f5ae9dff-user-1 and claude-f5ae9dff-user-5 share the hash
+  `f5ae9dff`, have different emails, and have separate quotas. The fork read them
+  21 ms apart at 03:12:11Z: weekly 83% left resetting 2026-11-29T23:00Z, and 64%
+  left resetting 2026-11-26T07:00Z. No legacy `claude-<email>.json` file exists.
+- Codex pair: codex-85e5a20c-user-2 and codex-85e5a20c-user-3 share the
+  `chatgpt_account_id` (the sanitizer gives each real id its own fake, and both
+  carry `...0001`) and the `85e5a20c` file hash, have different emails, and have
+  separate quotas: weekly 57% left resetting 2026-11-24T02:11:16Z, and 76% left
+  resetting 2026-11-27T11:58:55Z.
+- Following the user's decision of 2026-11-23, identity moves to the seat: the key
+  plus the email. These pairs are separate accounts, not aliases.
 
 ## Prior art
 
@@ -416,7 +521,10 @@ alternative if ours stalls.
 - 2026-11-22: polling runs in the app; no collector service. The menubar app is the
   only client. No alerts; the app is informative only.
 - 2026-11-22, after review: the menubar % is the 5-hour usable pool share. "Reset in
-  5h" stays when every subscription is full.
+  5h" stays when every enabled subscription has full, usable 5-hour quota.
+- 2026-11-23, after P0.3: account identity is the seat. Claude uses the hash plus
+  the email, Codex the `chatgpt_account_id` plus the email, because team seats share
+  the key but not the quota (see "P0.4 as captured"). T4b implements it.
 
 ## Open questions
 

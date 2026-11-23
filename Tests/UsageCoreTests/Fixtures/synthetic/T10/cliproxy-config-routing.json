@@ -1,0 +1,1 @@
+{ "routing": { "strategy": "round-robin", "session-affinity": false } }

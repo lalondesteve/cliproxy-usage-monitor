@@ -1,0 +1,35 @@
+{
+  "time": "2026-11-22T12:00:00Z",
+  "accounts": [
+    {
+      "name": "team-a",
+      "available": true,
+      "headroom": 70,
+      "exhausted": false,
+      "polled_at": "2026-11-22T11:59:00Z",
+      "poll_error": "",
+      "windows": {
+        "rolling": { "status": "ok", "percent": 30, "resets_at": "2026-11-22T14:00:00Z" },
+        "weekly": { "status": "error", "percent": 0, "resets_at": "2026-11-29T09:00:00Z" },
+        "monthly": { "percent": 0, "resets_at": "2026-12-01T00:00:00Z" }
+      },
+      "console_available": true,
+      "free_available": true
+    },
+    {
+      "name": "team-b",
+      "available": true,
+      "headroom": 100,
+      "exhausted": false,
+      "polled_at": "2026-11-22T11:59:00Z",
+      "poll_error": "",
+      "windows": {
+        "rolling": { "status": "unknown", "percent": 0, "resets_at": "2026-11-22T14:00:00Z" },
+        "weekly": { "status": "OK", "percent": 0, "resets_at": "2026-11-29T09:00:00Z" },
+        "monthly": { "status": "ok", "resets_at": "2026-12-01T00:00:00Z" }
+      },
+      "console_available": true,
+      "free_available": true
+    }
+  ]
+}

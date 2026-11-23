@@ -1,0 +1,85 @@
+{
+  "accounts": [
+    {
+      "id": "claude-1a2b3c4d-user-1@example.com.json",
+      "provider": "anthropic",
+      "status": "ok",
+      "reading": {
+        "observedAt": "2026-11-22T11:55:00Z",
+        "windows": {
+          "short": { "remaining": 70, "resetAt": "2026-11-22T14:10:00Z" },
+          "weekly": { "remaining": 41.5, "resetAt": "0001-01-01T00:00:00Z" }
+        }
+      }
+    },
+    {
+      "id": "claude-9f8e7d6c-user-6@example.com.json",
+      "provider": "anthropic",
+      "status": "stale",
+      "reading": {
+        "observedAt": "2026-11-22T09:00:00Z",
+        "windows": { "short": { "remaining": null, "resetAt": "2026-11-22T13:00:00Z" } }
+      }
+    },
+    {
+      "id": "codex-user-3@example.com-plus.json",
+      "provider": "codex",
+      "status": "ok",
+      "reading": {
+        "windows": [
+          { "window": "short", "remaining": 100, "resetAt": "0001-01-01T00:00:00Z", "observedAt": "2026-11-22T11:50:00Z" },
+          { "window": "weekly", "remaining": 63, "resetAt": "2026-11-25T09:00:00Z", "observedAt": "2026-11-22T11:50:00Z" }
+        ]
+      }
+    }
+  ],
+  "pools": [
+    {
+      "provider": "anthropic",
+      "window": "short",
+      "remaining": null,
+      "knownRemaining": 70,
+      "history": [
+        { "time": "2026-11-22T11:00:00Z", "accounts": [
+          { "id": "claude-1a2b3c4d-user-1@example.com.json", "status": "ok", "remaining": 80, "observedAt": "2026-11-22T10:55:00Z", "resetAt": "2026-11-22T14:10:00Z" },
+          { "id": "claude-9f8e7d6c-user-6@example.com.json", "status": "stale", "remaining": 50, "observedAt": "2026-11-22T09:00:00Z", "resetAt": "2026-11-22T13:00:00Z" }
+        ] },
+        { "time": "2026-11-22T11:05:00Z", "accounts": [
+          { "id": "claude-1a2b3c4d-user-1@example.com.json", "status": "ok", "remaining": 80, "observedAt": "2026-11-22T10:55:00Z", "resetAt": "2026-11-22T14:10:00Z" },
+          { "id": "claude-9f8e7d6c-user-6@example.com.json", "status": "error", "remaining": null, "observedAt": "2026-11-22T11:04:00Z" }
+        ] },
+        { "time": "2026-11-22T11:10:00Z", "accounts": [
+          { "id": "claude-1a2b3c4d-user-1@example.com.json", "status": "ok", "remaining": 75, "observedAt": "2026-11-22T11:00:00Z", "resetAt": "2026-11-22T14:10:00Z" },
+          { "id": "claude-9f8e7d6c-user-6@example.com.json", "status": "ok", "remaining": null, "observedAt": "2026-11-22T11:09:00Z" }
+        ] }
+      ]
+    },
+    {
+      "provider": "anthropic",
+      "window": "weekly",
+      "history": [
+        { "time": "2026-11-22T11:00:00Z", "accounts": [
+          { "id": "claude-1a2b3c4d-user-1@example.com.json", "status": "ok", "remaining": 45, "observedAt": "2026-11-22T10:55:00Z", "resetAt": "0001-01-01T00:00:00Z" }
+        ] },
+        { "time": "2026-11-22T11:10:00Z", "accounts": [
+          { "id": "claude-1a2b3c4d-user-1@example.com.json", "status": "ok", "remaining": 45, "observedAt": "2026-11-22T10:55:00Z", "resetAt": "0001-01-01T00:00:00Z" },
+          { "id": "claude-1a2b3c4d-user-1@example.com.json", "status": "ok", "remaining": 44, "observedAt": "2026-11-22T11:00:00Z", "resetAt": "2026-11-27T08:00:00Z" }
+        ] }
+      ]
+    },
+    {
+      "provider": "codex",
+      "window": "short",
+      "history": []
+    },
+    {
+      "provider": "codex",
+      "window": "weekly",
+      "history": [
+        { "time": "2026-11-22T11:00:00Z", "accounts": [
+          { "id": "codex-user-3@example.com-plus.json", "status": "ok", "remaining": 64, "observedAt": "2026-11-22T10:50:00Z", "resetAt": "2026-11-25T09:00:00Z" }
+        ] }
+      ]
+    }
+  ]
+}

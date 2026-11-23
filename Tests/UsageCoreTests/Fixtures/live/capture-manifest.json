@@ -1,0 +1,35 @@
+{
+  "captured_at": "2026-11-23T03:16:02Z",
+  "endpoints": [
+    {
+      "name": "cliproxy-credentials",
+      "path": "/v8/management/credentials",
+      "status": 200,
+      "requested_at": "2026-11-23T03:16:02Z"
+    },
+    {
+      "name": "cliproxy-quota-history-24h",
+      "path": "/v8/management/quota/history?range=24h",
+      "status": 200,
+      "requested_at": "2026-11-23T03:16:02Z"
+    },
+    {
+      "name": "cliproxy-routing-strategy",
+      "path": "/v0/management/routing/strategy",
+      "status": 200,
+      "requested_at": "2026-11-23T03:16:02Z"
+    },
+    {
+      "name": "cliproxy-config-routing",
+      "path": "/v0/management/config",
+      "status": 200,
+      "requested_at": "2026-11-23T03:16:02Z"
+    },
+    {
+      "name": "ocgo-status",
+      "path": "/_ocgo/status",
+      "status": 200,
+      "requested_at": "2026-11-23T03:16:02Z"
+    }
+  ]
+}
