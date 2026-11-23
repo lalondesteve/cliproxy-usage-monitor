@@ -172,6 +172,29 @@ struct T9cSaveTests {
         #expect(h.secrets.writes.isEmpty)
     }
 
+    /// The style applies and is stored without Save, and doesn't save other edits.
+    @Test func menubarStyleAppliesWithoutSave() async throws {
+        let h = try await Harness().loaded()
+        var applied: [MenubarStyle] = []
+        h.model.onMenubarStyle = { applied.append($0) }
+        h.model.form.staleMinutes = "10"
+        h.model.setMenubarStyle(.compact)
+        #expect(applied == [.compact])
+        var expected = savedSettings
+        expected.menubarStyle = .compact
+        #expect(h.store.load() == expected)
+        #expect(h.model.settings == expected)
+        #expect(h.model.form.staleMinutes == "10")
+        #expect(await h.calls.isEmpty)
+        #expect(h.savedCallbacks.isEmpty)
+
+        h.model.setMenubarStyle(.compact)
+        #expect(applied == [.compact])
+        // A reopened window shows the stored style.
+        await h.model.load()
+        #expect(h.model.form.menubarStyle == .compact)
+    }
+
     @Test func unchangedSaveCallsNothing() async throws {
         let h = try await Harness().loaded()
         await h.model.save()

@@ -87,6 +87,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Wiring.log("settings saved (menubar \(saved.menubarStyle.rawValue), "
                 + "ocgo \(saved.ocgoConfigured ? "configured" : "not configured"))")
         }
+        model.onMenubarStyle = { [weak self] style in
+            self?.statusItem?.style = style
+            Wiring.log("menubar \(style.rawValue)")
+        }
         setupWindow = SetupWindowController(model: model)
         if settingsRequested || (options.fixtures == nil && SetupWindowController.needsSetup(settings: settings)) {
             settingsRequested = false

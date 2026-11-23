@@ -39,6 +39,9 @@ final class SetupModel {
     /// Called after each successful save, so the integrator can apply the menubar style
     /// and hide or show the Go row (`AppSettings.ocgoConfigured`).
     var onSaved: ((AppSettings, SettingsChanges) -> Void)?
+    /// Called when the menubar style changes. The style applies and is stored at once,
+    /// without Save.
+    var onMenubarStyle: ((MenubarStyle) -> Void)?
 
     private let saver: SettingsSaver
     /// Bumped by each load and each save; a load result applies only if it still matches.
@@ -57,6 +60,22 @@ final class SetupModel {
     }
 
     var isBusy: Bool { phase == .loading || saveState == .saving }
+
+    /// Stores the style on top of the last saved settings (other unsaved edits stay in
+    /// the form) and applies it.
+    func setMenubarStyle(_ style: MenubarStyle) {
+        form.menubarStyle = style
+        guard style != settings.menubarStyle else { return }
+        var updated = settings
+        updated.menubarStyle = style
+        do {
+            try saver.settingsStore.save(updated)
+            settings = updated
+        } catch {
+            saveState = .failed("Couldn't save the menubar style: \(error).")
+        }
+        onMenubarStyle?(style)
+    }
 
     /// The Test button asks before sending when cliproxy already rejected a key.
     func confirmsTest(_ kind: SourceKind) -> Bool {

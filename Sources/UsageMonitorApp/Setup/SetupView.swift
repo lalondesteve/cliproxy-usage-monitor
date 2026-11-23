@@ -10,16 +10,19 @@ struct SetupView: View {
     var body: some View {
         VStack(spacing: 0) {
             Form {
-                cliproxySection
-                ocgoSection
                 Section("Menubar") {
-                    Picker("Style", selection: $model.form.menubarStyle) {
+                    Picker("Style", selection: Binding(
+                        get: { model.form.menubarStyle },
+                        set: { model.setMenubarStyle($0) }
+                    )) {
                         Text("Normal").tag(MenubarStyle.normal)
                         Text("Compact").tag(MenubarStyle.compact)
                     }
                     .pickerStyle(.segmented)
-                    .help("Normal shows each provider's logo and %. Compact shows one icon that expands on click.")
+                    .help("Normal shows each provider's logo and %. Compact shows one icon that expands on click. Applies at once.")
                 }
+                cliproxySection
+                ocgoSection
                 Section("Freshness") {
                     TextField("Stale after (minutes)", text: $model.form.staleMinutes)
                         .help("Readings older than this are marked stale in the dropdown.")

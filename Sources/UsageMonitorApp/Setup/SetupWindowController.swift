@@ -26,7 +26,7 @@ final class SetupWindowController: NSWindowController {
     init(model: SetupModel) {
         self.model = model
         let hosting = NSHostingController(rootView: SetupView(model: model))
-        let window = NSWindow(contentViewController: hosting)
+        let window = EscapeClosingWindow(contentViewController: hosting)
         window.title = "Usage Monitor Settings"
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.setContentSize(NSSize(width: 520, height: 680))
@@ -37,6 +37,12 @@ final class SetupWindowController: NSWindowController {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    /// Escape closes the window, like a dialog. Unsaved edits are dropped, as with the
+    /// close button.
+    private final class EscapeClosingWindow: NSWindow {
+        override func cancelOperation(_ sender: Any?) { performClose(sender) }
+    }
 
     /// Brings the window to the front. Opening a closed window reloads the saved values
     /// and the Keychain: the window and its view outlive a close, so edits, Test results
