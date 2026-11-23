@@ -7,7 +7,7 @@ public enum Unavailability: Codable, Equatable, Sendable {
     case outOfRotation
     /// ocgo
     case exhausted(until: Date?)
-    /// ocgo
+    /// ocgo cooldown, or a cliproxy credential that is unavailable with a future retry time
     case coolingDown(until: Date?)
     /// ocgo `forced_account` names another account
     case notForcedAccount
