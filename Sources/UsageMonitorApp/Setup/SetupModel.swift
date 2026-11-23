@@ -52,6 +52,9 @@ final class SetupModel {
     /// this Mac's IP after 5, so the next Test asks first. Survives reopening the window,
     /// since the ban counts on the server.
     private(set) var cliproxyRejections = 0
+    /// The Test generation of the newest counted rejection. A success clears the count
+    /// only if its Test was sent after that one.
+    private var newestRejection = 0
 
     init(settings: AppSettings, saver: SettingsSaver) {
         self.settings = settings
@@ -130,12 +133,14 @@ final class SetupModel {
             tests[kind] = TestRecord(state: .running, input: input)
             let result = await saver.pollControl.test(kind, config)
             // The request reached the server, so a rejection counts even if the form
-            // moved on. Only the newest Test clears the count: an older success arriving
-            // late must not erase a newer rejection.
-            if kind == .cliproxy {
+            // moved on. A success clears the count only if it was sent after the newest
+            // rejection: an older success arriving late must not erase a newer one.
+            if kind == .cliproxy, let sent = generation {
                 switch result {
-                case .success: if generation == testGenerations[kind] { cliproxyRejections = 0 }
-                case .failure(.unauthorized): cliproxyRejections += 1
+                case .success: if sent > newestRejection { cliproxyRejections = 0 }
+                case .failure(.unauthorized):
+                    cliproxyRejections += 1
+                    newestRejection = max(newestRejection, sent)
                 case .failure: break
                 }
             }

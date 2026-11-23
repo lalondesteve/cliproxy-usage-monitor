@@ -99,7 +99,7 @@ struct SetupView: View {
 
     static func retryWarning(_ rejections: Int) -> String {
         let times = rejections == 1 ? "once" : "\(rejections) times"
-        return "cliproxy has rejected a key \(times) since the last successful test. 5 wrong keys ban this Mac's IP for 30 minutes."
+        return "cliproxy has refused a Test \(times) since the last successful one. 5 wrong keys ban this Mac's IP for 30 minutes."
     }
 
     private static let aliasHelp = "Rarely needed. Merge two credential files for the same login so they count as one account."

@@ -368,6 +368,25 @@ struct T9cOverlapTests {
         #expect(m.confirmsTest(.cliproxy))
     }
 
+    /// A success sent after the rejection clears it, even if the window reopened while
+    /// it ran.
+    @Test func successAcrossAReopenClearsAnEarlierRejection() async throws {
+        let poll = T9cSuspendingPollControl()
+        let m = try model(T9cFakeSecretStore([.cliproxyKey: "old-key"]), poll, T9cDefaults())
+        await m.load()
+        let rejected = Task { await m.test(.cliproxy) }
+        try await t9cWait("first test sent") { await poll.waiting == 1 }
+        await poll.finish(0, with: .failure(.unauthorized))
+        await rejected.value
+        #expect(m.confirmsTest(.cliproxy))
+        let fixed = Task { await m.test(.cliproxy) }
+        try await t9cWait("second test sent") { await poll.waiting == 1 }
+        await m.load()
+        await poll.finish(1, with: .success("3 credentials"))
+        await fixed.value
+        #expect(!m.confirmsTest(.cliproxy))
+    }
+
     @Test func resultForEditedFieldsIsHidden() async throws {
         let poll = T9cSuspendingPollControl()
         let m = try model(T9cFakeSecretStore([.cliproxyKey: "old-key"]), poll, T9cDefaults())
