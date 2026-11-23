@@ -42,6 +42,12 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
+  <!-- The proxies are plain http:// over NetBird (WireGuard). Without this, App
+       Transport Security refuses every http:// request and Test says the server
+       can't be reached. -->
+  <key>NSAppTransportSecurity</key>
+  <dict><key>NSAllowsArbitraryLoads</key><true/></dict>
+  <key>NSLocalNetworkUsageDescription</key><string>Usage Monitor reads your cliproxy and ocgo-proxy servers on your private network.</string>
 </dict>
 </plist>
 PLIST

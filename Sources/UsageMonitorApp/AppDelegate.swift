@@ -17,6 +17,7 @@ enum UsageMonitorMain {
             let delegate = AppDelegate(options: options, env: env)
             app.delegate = delegate
             app.setActivationPolicy(.accessory)
+            app.mainMenu = MainMenu.make()
             withExtendedLifetime(delegate) { app.run() }
         }
     }
