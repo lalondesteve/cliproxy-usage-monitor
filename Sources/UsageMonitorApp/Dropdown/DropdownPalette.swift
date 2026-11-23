@@ -16,6 +16,12 @@ struct DropdownPalette: Sendable {
     let textSecondary: Color
     let textMuted: Color
     let track: Color
+    /// The recessed line: the channel, the shadow under its top edge, its rim and the
+    /// light lip under it.
+    let groove: Color
+    let grooveShadow: Color
+    let grooveRim: Color
+    let grooveLip: Color
     let warning: Color
     let error: Color
     /// Orange, blue, green, purple. Higher indexes get derived colors
@@ -28,6 +34,8 @@ struct DropdownPalette: Sendable {
     static let light = DropdownPalette(
         surface: hex(0xFCFCFB), textPrimary: hex(0x0B0B0B), textSecondary: hex(0x52514E),
         textMuted: hex(0x8A8984), track: hex(0xE9E8E4),
+        groove: hex(0xDAD8D2), grooveShadow: .black.opacity(0.22), grooveRim: .black.opacity(0.12),
+        grooveLip: .white.opacity(0.9),
         warning: hex(0xB25E00), error: hex(0xC4302B),
         series: accountColors,
         derivedSaturation: 0.78, derivedBrightness: 0.80
@@ -36,6 +44,8 @@ struct DropdownPalette: Sendable {
     static let dark = DropdownPalette(
         surface: hex(0x1A1A19), textPrimary: hex(0xF0EFEC), textSecondary: hex(0xC3C2B7),
         textMuted: hex(0x8F8E86), track: hex(0x2E2E2C),
+        groove: hex(0x141924), grooveShadow: .black.opacity(0.65), grooveRim: .black.opacity(0.35),
+        grooveLip: .white.opacity(0.08),
         warning: hex(0xE0A040), error: hex(0xEF6B64),
         series: accountColors,
         derivedSaturation: 0.72, derivedBrightness: 0.86

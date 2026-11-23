@@ -64,7 +64,7 @@ struct T9bSnapshotTests {
         #expect(close(color(35), palette.series[2]))   // C (35) on top up to 70
         #expect(close(color(85), palette.series[0]))   // A up to 160
         #expect(close(color(130), palette.series[0]))
-        #expect(close(color(180), palette.track))      // empty track after
+        #expect(close(color(180), palette.groove))     // empty channel after
     }
 
     private func distinctColors(_ rep: NSBitmapImageRep) -> Int {

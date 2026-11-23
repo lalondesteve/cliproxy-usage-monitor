@@ -53,28 +53,50 @@ func paceX(_ gauge: WindowGauge?, width: CGFloat) -> CGFloat? {
     gauge?.pace.map { width * CGFloat(min(max($0, 0), 1)) }
 }
 
-/// One window's line: the overlap bars on the track, the zero ticks standing 2 pt above
-/// and below the line, and (weekly) the pace marker, the full height of the view.
+/// One window's line, recessed as a groove (user, 2026-11-23, mockup C): a darker
+/// channel 1 pt larger than the bars on every side, a shadow along its inner top edge,
+/// a 1 pt dark rim and a 1 pt light lip under it. The overlap bars sit inside the
+/// channel, the zero ticks stand 2 pt above and below it, and (weekly) the pace marker
+/// runs the full height of the view.
 struct OverlapLineView: View {
     let bars: [GaugeBar]
     let palette: DropdownPalette
     var pace: Double? = nil
     var thickness: CGFloat = 8
-    static let height: CGFloat = 12
+    static let height: CGFloat = 14
+    static let rim: CGFloat = 1
 
     var body: some View {
         Canvas { context, size in
+            let rim = Self.rim
             let y = (size.height - thickness) / 2
-            context.fill(Path(CGRect(x: 0, y: y, width: size.width, height: thickness)),
-                         with: .color(palette.track))
-            for r in overlapRects(bars: bars, width: size.width) {
-                let rect = r.kind == .bar
-                    ? CGRect(x: r.minX, y: y, width: r.width, height: thickness)
-                    : CGRect(x: r.minX, y: max(y - 2, 0), width: r.width, height: min(thickness + 4, size.height))
-                context.fill(Path(rect), with: .color(palette.fill(r.style)))
+            let channel = CGRect(x: 0, y: y - rim, width: size.width, height: thickness + 2 * rim)
+            let inner = channel.insetBy(dx: rim, dy: rim)
+            // The lip, then the channel.
+            context.fill(Path(CGRect(x: 0, y: channel.maxY, width: size.width, height: 1)),
+                         with: .color(palette.grooveLip))
+            context.fill(Path(channel), with: .color(palette.groove))
+            var ticks: [(CGRect, BarStyle)] = []
+            for r in overlapRects(bars: bars, width: inner.width) {
+                if r.kind == .bar {
+                    context.fill(Path(CGRect(x: inner.minX + r.minX, y: inner.minY, width: r.width,
+                                             height: inner.height)),
+                                 with: .color(palette.fill(r.style)))
+                } else {
+                    ticks.append((CGRect(x: inner.minX + r.minX, y: max(channel.minY - 2, 0), width: r.width,
+                                         height: min(channel.height + 4, size.height)), r.style))
+                }
             }
+            // The inset shade over the bars: a shadow under the top edge and the rim.
+            context.fill(Path(CGRect(x: inner.minX, y: inner.minY, width: inner.width, height: 2)),
+                         with: .linearGradient(Gradient(colors: [palette.grooveShadow, .clear]),
+                                               startPoint: CGPoint(x: 0, y: inner.minY),
+                                               endPoint: CGPoint(x: 0, y: inner.minY + 2)))
+            context.stroke(Path(channel.insetBy(dx: rim / 2, dy: rim / 2)),
+                           with: .color(palette.grooveRim), lineWidth: rim)
+            for (rect, style) in ticks { context.fill(Path(rect), with: .color(palette.fill(style))) }
             if let pace {
-                let x = size.width * CGFloat(min(max(pace, 0), 1))
+                let x = inner.minX + inner.width * CGFloat(min(max(pace, 0), 1))
                 let tick = CGRect(x: min(max(x - 1, 0), size.width - 2), y: 0, width: 2, height: size.height)
                 context.fill(Path(tick), with: .color(palette.textPrimary))
             }
