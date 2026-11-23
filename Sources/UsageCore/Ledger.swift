@@ -266,9 +266,14 @@ public final class Ledger: LedgerUpdating, @unchecked Sendable {
         let unavailable: [Unavailability]
         if enabled.contains(where: { $0.unavailable.isEmpty }) {
             unavailable = []
+        } else if let first = Self.firstBack(enabled) {
+            // Every enabled credential is blocked: the account takes traffic again when
+            // the first one comes back, so it carries that credential's reasons. A
+            // union would end the block at the last credential's end (Pool rule 5).
+            unavailable = first.unavailable
         } else {
-            // Why no credential can take traffic: the enabled ones' reasons, or every
-            // file's reasons when none is enabled.
+            // No enabled credential has a known end: the enabled ones' reasons, or
+            // every file's reasons when none is enabled.
             var reasons: [Unavailability] = []
             for reason in (enabled.isEmpty ? routes : enabled).flatMap(\.unavailable)
             where !reasons.contains(reason) {
@@ -279,6 +284,27 @@ public final class Ledger: LedgerUpdating, @unchecked Sendable {
         return MergedAccount(id: id, alias: alias.alias, email: sorted.lazy.compactMap(\.email).first,
                              enabled: !enabled.isEmpty, unavailable: unavailable,
                              credentials: routes, colorIndex: alias.colorIndex)
+    }
+
+    /// The blocked credential with the earliest known end, the first by fileKey on a
+    /// tie. A credential's end is the latest `until` of its reasons, unknown when any
+    /// reason has none. Nil when no credential's end is known.
+    private static func firstBack(_ credentials: [CredentialRoute]) -> CredentialRoute? {
+        func end(_ c: CredentialRoute) -> Date? {
+            var end: Date?
+            for reason in c.unavailable {
+                let until: Date?
+                switch reason {
+                case .exhausted(let u), .coolingDown(let u): until = u
+                case .upstreamUnavailable, .outOfRotation, .notForcedAccount: until = nil
+                }
+                guard let until else { return nil }
+                end = max(end ?? until, until)
+            }
+            return end
+        }
+        return credentials.compactMap { c in end(c).map { (c, $0) } }
+            .min { $0.1 < $1.1 }?.0
     }
 
     /// The stored alias and color, assigned by the store on first sight. A store

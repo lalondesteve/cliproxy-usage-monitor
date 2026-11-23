@@ -7,6 +7,9 @@ struct CliproxyCredential: Equatable, Sendable {
     let email: String?
     let enabled: Bool
     let upstreamUnavailable: Bool
+    /// When cliproxy retries an unavailable credential: the latest of
+    /// `next_retry_after` and the credential-scope `cooldowns[].retry_at`. nil when unset.
+    let unavailableUntil: Date?
     let requestCounter: Int?
     let routing: AccountRouting
 }
@@ -18,8 +21,8 @@ struct CliproxyCredentialList: Equatable, Sendable {
 }
 
 /// Parses `GET /v8/management/credentials` (plan.md "cliproxy", "Identity" and
-/// "Reading passive signals"). Field names follow plan.md; the payload isn't verified
-/// against the fork yet (P0.2, P0.3).
+/// "Reading passive signals"). The live capture (P0.3) wraps the list in `files`;
+/// providers other than Claude and Codex (such as `antigravity`) are skipped.
 enum CliproxyCredentialsParser {
     static func parse(_ data: Data) -> Result<CliproxyCredentialList, SourceError> {
         let root: CliproxyJSON
@@ -47,6 +50,7 @@ enum CliproxyCredentialsParser {
                 email: email,
                 enabled: !(entry["disabled"]?.bool ?? false),
                 upstreamUnavailable: entry["unavailable"]?.bool ?? false,
+                unavailableUntil: retryAt(entry),
                 requestCounter: requestCounter(entry),
                 routing: AccountRouting(
                     priority: entry["priority"]?.int ?? attributes?["priority"]?.int ?? 0,
@@ -59,6 +63,19 @@ enum CliproxyCredentialsParser {
             list.unclassified += passive.unclassified
         }
         return .success(list)
+    }
+
+    /// A quota-blocked credential carries `next_retry_after` and a `cooldowns[]` entry
+    /// with `scope: "credential"` and `retry_at`, both the same instant in the live
+    /// capture. Model-scope cooldowns don't block the credential. The latest of these
+    /// times is the retry: a `next_retry_after` already past mustn't hide a later
+    /// credential-scope `retry_at`. CliproxySource treats a time not after `takenAt`
+    /// as no known end.
+    static func retryAt(_ entry: CliproxyJSON) -> Date? {
+        let cooldowns = (entry["cooldowns"]?.array ?? [])
+            .filter { $0["scope"]?.string?.lowercased() == "credential" }
+            .compactMap { $0["retry_at"]?.date }
+        return ([entry["next_retry_after"]?.date].compactMap { $0 } + cooldowns).max()
     }
 
     /// `success + failed`, or nil unless both are present, whole and non-negative and

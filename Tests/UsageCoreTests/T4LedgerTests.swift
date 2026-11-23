@@ -412,6 +412,36 @@ struct T4MergeTests {
         #expect(ledger.accounts.first?.enabled == false)
     }
 
+    /// A's two credentials are both blocked at 12:30; A's 5-hour reading is 40 used
+    /// (60 left), reset 15:00. A takes traffic again when its first credential comes
+    /// back, at 13:00, before the 15:00 reset, so the refill is A's 60 left at 13:00
+    /// (one account, so +60 to the pool). A union of the reasons would end the block at
+    /// 14:00 in the first case and never in the second.
+    static let blockedCredentialCases: [(second: Unavailability, label: String)] = [
+        (.coolingDown(until: t("14:00")), "cooling until 14:00"),
+        (.outOfRotation, "out of rotation"),
+    ]
+
+    @Test(arguments: blockedCredentialCases)
+    func accountComesBackWithItsFirstCredential(second: Unavailability, label: String) throws {
+        let ledger = Ledger(store: store, settings: PoolSettings())
+        let now = t("12:30")
+        ledger.apply(cliproxy(now, [
+            cred("aaaa0001", file: fileA, unavailable: [.coolingDown(until: t("13:00"))]),
+            cred("aaaa0001", file: fileA2, unavailable: [second]),
+        ], readings: [reading(fileA, .fiveHour, used: 40, resets: t("15:00"), at: t("12:25"))],
+           routing: RoutingConfig(strategy: .roundRobin, sessionAffinity: false, forcedAccount: nil)))
+
+        let a = try #require(ledger.accounts.first)
+        #expect(a.unavailable == [.coolingDown(until: t("13:00"))], "\(label)")
+
+        let model = PoolEngine.dashboard(ledger: ledger, settings: PoolSettings(),
+                                         sources: [.cliproxy: .ok(at: now)], now: now)
+        let refill = try #require(model.row(.claude)?.fiveHour?.nextRefill, "\(label)")
+        #expect(refill.at == t("13:00"), "\(label)")
+        #expect(abs(refill.poolGain - 60) < 1e-9, "\(label)")
+    }
+
     @Test func e14TwoAccountsThenOneWithAlias() throws {
         let legacy = "claude-x@example.com.json"
         let hashed = AccountID(provider: .claude, identity: "1a2b3c4d")

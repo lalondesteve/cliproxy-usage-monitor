@@ -26,12 +26,27 @@ public struct CliproxyForkHistorySource: ForkHistorySource {
     }
 }
 
-/// Parses a `quota/history` body. Field names follow plan.md (`accounts[].id`,
-/// `provider`, `status`, `reading.windows`; `pools[].history[].accounts[]` with
-/// `id`, `status`, `remaining`, `observedAt`, `resetAt`); the exact shape isn't
-/// verified yet (P0.2, P0.3), so window names and wrappings are read loosely.
+/// Parses a `quota/history` body, following the live capture (P0.3):
+///
+/// - `accounts[]`: `account.{id, provider, enabled}`, `status`, and `reading` with
+///   `at`, `status` and `windows[]` of `{id: "short" | "weekly", durationSeconds,
+///   remaining, resetAt, resetKind}`. API-key credentials (`claude:apikey:...`) show
+///   status "unsupported" or "removed" and have no reading.
+/// - `pools[]`: `provider`, `window`, and `history[]` knots whose `accounts[]` hold
+///   `id`, `status`, `remaining`, `observedAt`, `resetAt`.
+/// - Provider "anthropic" is Claude. Timestamps carry up to 9 fractional digits;
+///   Go's zero time means unset. Top-level `events[]` and the fork's pooled numbers
+///   are ignored.
+///
+/// The flat shape of the synthetic T6 fixtures (`id` and `provider` on the account,
+/// `observedAt` instead of `at`, windows keyed by name) is still read.
 /// Values are remaining %, stored as used % (100 - remaining).
 enum CliproxyForkHistoryParser {
+    /// Statuses of credentials the poller doesn't read. They don't decide whether a
+    /// provider is paused: API-key credentials stay "unsupported" whatever the poller
+    /// does.
+    static let unpolledStatuses: Set<String> = ["unsupported", "removed"]
+
     static func parse(_ data: Data) -> Result<ForkHistoryResponse, SourceError> {
         guard let root = try? CliproxyJSON.parse(data), root.object != nil else {
             return .failure(.decoding("quota/history is not a JSON object"))
@@ -39,31 +54,37 @@ enum CliproxyForkHistoryParser {
         let accounts = root["accounts"]?.array ?? []
         let pools = root["pools"]?.array ?? []
 
-        // A provider is paused when every one of its accounts says "paused".
+        // A provider is paused when every polled account says "paused". A provider
+        // with no polled account (only API keys, say) is left out: the fork has no
+        // readings for it.
         var statuses: [Provider: [String]] = [:]
         var providerOfAccount: [String: Provider] = [:]
         for a in accounts {
-            guard let provider = cliproxyProvider(a["provider"]?.string) else { continue }
-            statuses[provider, default: []].append(a["status"]?.string?.lowercased() ?? "")
+            guard let provider = accountProvider(a) else { continue }
             if let id = accountID(a) { providerOfAccount[id] = provider }
+            let status = a["status"]?.string?.lowercased() ?? ""
+            if !unpolledStatuses.contains(status) { statuses[provider, default: []].append(status) }
         }
         var providers: [Provider: ForkProviderState] = [:]
         for (provider, s) in statuses {
             providers[provider] = s.allSatisfy { $0 == "paused" } ? .paused : .served
         }
-        // Only providers listed in accounts[] and not paused give readings.
+        // Only providers with a polled account that aren't paused give readings.
         let served = { (p: Provider) in providers[p] == .served }
 
         var current: [SourceReading] = []
         for a in accounts {
-            guard let provider = cliproxyProvider(a["provider"]?.string), served(provider),
+            guard let provider = accountProvider(a), served(provider),
                   a["status"]?.string?.lowercased() != "paused",
-                  let id = accountID(a), let reading = a["reading"]
+                  let id = accountID(a), let reading = a["reading"],
+                  isOK(reading["status"], absentIsOK: true)
             else { continue }
             for (window, w) in windows(reading["windows"]) {
-                // An unset window time falls back to the reading's, then the account's.
+                // The window's own time, else the reading's (`at` live), else the
+                // account's; an unset one falls through to the next.
+                let times = [w["observedAt"], reading["at"], reading["observedAt"], a["observedAt"]]
                 guard isOK(w["status"], absentIsOK: true),
-                      let observedAt = [w, reading, a].lazy.compactMap({ $0["observedAt"]?.date }).first
+                      let observedAt = times.lazy.compactMap({ $0?.date }).first
                 else { continue }
                 if let r = sourceReading(provider, id, window, w, observedAt) { current.append(r) }
             }
@@ -101,10 +122,16 @@ enum CliproxyForkHistoryParser {
                                             history: history))
     }
 
+    /// `account.id` on a live account entry; `id` on a history entry and in the flat
+    /// account shape.
     private static func accountID(_ node: CliproxyJSON) -> String? {
-        guard let id = node["id"]?.nonEmptyString ?? node["account"]?["id"]?.nonEmptyString
-        else { return nil }
-        return id
+        node["account"]?["id"]?.nonEmptyString ?? node["id"]?.nonEmptyString
+    }
+
+    /// `account.provider` live; `provider` in the flat shape.
+    private static func accountProvider(_ node: CliproxyJSON) -> Provider? {
+        cliproxyProvider(node["account"]?["provider"]?.nonEmptyString
+            ?? node["provider"]?.nonEmptyString)
     }
 
     private static func isOK(_ status: CliproxyJSON?, absentIsOK: Bool) -> Bool {
@@ -122,8 +149,9 @@ enum CliproxyForkHistoryParser {
                              source: .forkPoller)
     }
 
-    /// `windows` as an object keyed by window name, or an array of objects that
-    /// name their window.
+    /// `windows` as an array of objects that name their window (`id` live), or an
+    /// object keyed by window name. A window whose name isn't known is classified by
+    /// its `durationSeconds`.
     private static func windows(_ node: CliproxyJSON?) -> [(WindowKind, CliproxyJSON)] {
         if let object = node?.object {
             return object.keys.sorted().compactMap { key in
@@ -131,7 +159,9 @@ enum CliproxyForkHistoryParser {
             }
         }
         return (node?.array ?? []).compactMap { w in
-            (w["window", "name", "kind", "pool"]?.string).flatMap(windowKind).map { ($0, w) }
+            let kind = (w["id", "window", "name", "kind", "pool"]?.string).flatMap(windowKind)
+                ?? w["durationSeconds"]?.int.flatMap(windowKind(seconds:))
+            return kind.map { ($0, w) }
         }
     }
 
@@ -139,7 +169,16 @@ enum CliproxyForkHistoryParser {
         for key in ["window", "kind", "pool", "name", "id"] {
             if let name = pool[key]?.string, let kind = windowKind(name) { return kind }
         }
-        return nil
+        return pool["durationSeconds"]?.int.flatMap(windowKind(seconds:))
+    }
+
+    /// The fork's window lengths: 18000 s is the 5-hour window, 604800 s the weekly one.
+    static func windowKind(seconds: Int) -> WindowKind? {
+        switch seconds {
+        case 18_000: .fiveHour
+        case 604_800: .weekly
+        default: nil
+        }
     }
 
     /// The fork names its windows "short" and "weekly"; Anthropic-style names are

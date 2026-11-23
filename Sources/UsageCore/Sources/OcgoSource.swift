@@ -168,7 +168,14 @@ enum OcgoStatusParser {
         ))
     }
 
-    /// One reading per window whose `status` is "ok", observed at `polled_at`.
+    /// Window statuses whose `percent` is a reading. The live capture (P0.3) shows
+    /// "rate-limited" on a window at its limit: `percent` 100 and `resets_at` equal to
+    /// the account's `exhausted_until`. That is a real reading (used up), not a failed
+    /// one; skipping it would make the window unknown.
+    static let readableStatuses: Set<String> = ["ok", "rate-limited"]
+
+    /// One reading per window whose `status` is "ok" or "rate-limited", observed at
+    /// `polled_at`.
     ///
     /// - No `polled_at` (or Go's zero time) means never polled: no reading at all.
     ///   Until the first poll ocgo reports headroom 100 and percent 0, which would
@@ -183,7 +190,7 @@ enum OcgoStatusParser {
     static func windowReadings(_ a: Account, polledAt: Date?) -> [SourceReading] {
         guard let observedAt = polledAt, let windows = a.windows else { return [] }
         return windowNames.compactMap { name, kind in
-            guard let w = windows[name], w.status == "ok",
+            guard let w = windows[name], let status = w.status, readableStatuses.contains(status),
                   let percent = w.percent, percent.isFinite
             else { return nil }
             return SourceReading(

@@ -1,0 +1,88 @@
+{
+  "time": "2026-11-23T03:16:02.611906097Z",
+  "go_models": {
+    "count": 30,
+    "fetched_at": "2026-11-23T03:14:11.590228535Z"
+  },
+  "accounts": [
+    {
+      "name": "team-a",
+      "available": false,
+      "headroom": 0,
+      "exhausted": true,
+      "exhausted_until": "2026-11-30T21:54:01Z",
+      "polled_at": "2026-11-23T03:14:11.573035212Z",
+      "windows": {
+        "monthly": {
+          "status": "rate-limited",
+          "percent": 100,
+          "resets_at": "2026-11-30T21:54:01Z"
+        },
+        "rolling": {
+          "status": "ok",
+          "percent": 0,
+          "resets_at": "2026-11-23T08:14:11.53Z"
+        },
+        "weekly": {
+          "status": "ok",
+          "percent": 0,
+          "resets_at": "2026-11-30T00:00:00Z"
+        }
+      },
+      "console_available": true,
+      "free_available": true
+    },
+    {
+      "name": "team-b",
+      "available": true,
+      "headroom": 33,
+      "exhausted": false,
+      "polled_at": "2026-11-23T03:14:11.542943569Z",
+      "windows": {
+        "monthly": {
+          "status": "ok",
+          "percent": 67,
+          "resets_at": "2026-11-28T22:29:26Z"
+        },
+        "rolling": {
+          "status": "ok",
+          "percent": 0,
+          "resets_at": "2026-11-23T08:14:11.513Z"
+        },
+        "weekly": {
+          "status": "ok",
+          "percent": 0,
+          "resets_at": "2026-11-30T00:00:00Z"
+        }
+      },
+      "console_available": true,
+      "free_available": true
+    },
+    {
+      "name": "extra",
+      "available": true,
+      "headroom": 89,
+      "exhausted": false,
+      "polled_at": "2026-11-23T03:14:11.548307801Z",
+      "windows": {
+        "monthly": {
+          "status": "ok",
+          "percent": 11,
+          "resets_at": "2026-11-30T21:54:01Z"
+        },
+        "rolling": {
+          "status": "ok",
+          "percent": 2,
+          "resets_at": "2026-11-23T05:36:42Z"
+        },
+        "weekly": {
+          "status": "ok",
+          "percent": 0,
+          "resets_at": "2026-11-30T00:00:00Z"
+        }
+      },
+      "console_available": true,
+      "free_available": true
+    }
+  ]
+}

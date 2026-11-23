@@ -101,7 +101,7 @@ struct T6LiveFixtureTests {
         #expect(response.history.count == expected.deduplicated,
                 "parsed history count differs from the raw count")
 
-        // The fork's account.id should be the credential list's id (unverified, P0.2).
+        // The fork's account.id is the credential list's id (true in the P0.3 capture).
         if Self.exists(Self.credentials) {
             let credentialKeys = try CliproxyCredentialsParser.parse(try Self.data(Self.credentials)).get()
                 .credentials.map(\.fileKey)
@@ -111,10 +111,11 @@ struct T6LiveFixtureTests {
         }
     }
 
-    /// Counts history samples straight from the raw JSON with plan.md's literal field
+    /// Counts history samples straight from the raw JSON with the live capture's field
     /// names, independent of the parser: ok entries with a remaining and an observedAt,
-    /// for providers listed in accounts[] and not all paused, deduplicated by
-    /// (id, provider, pool window, observedAt instant).
+    /// for providers whose polled accounts (`accounts[].account.provider`; API keys
+    /// with status "unsupported" or "removed" don't count) aren't all paused,
+    /// deduplicated by (id, provider, pool window, observedAt instant).
     static func rawHistoryCount(_ data: Data) throws -> (okSamples: Int, deduplicated: Int) {
         let root = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
         let accounts = try #require(root["accounts"] as? [[String: Any]], "no accounts array")
@@ -128,9 +129,11 @@ struct T6LiveFixtureTests {
         }
         var statuses: [String: [String]] = [:]
         for a in accounts {
-            if let p = provider(a["provider"]) {
-                statuses[p, default: []].append((a["status"] as? String ?? "").lowercased())
-            }
+            let status = (a["status"] as? String ?? "").lowercased()
+            guard let p = provider((a["account"] as? [String: Any])?["provider"] ?? a["provider"]),
+                  !["unsupported", "removed"].contains(status)
+            else { continue }
+            statuses[p, default: []].append(status)
         }
         let served = Set(statuses.filter { !$0.value.allSatisfy { $0 == "paused" } }.keys)
 

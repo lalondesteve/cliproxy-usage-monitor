@@ -76,7 +76,16 @@ public struct CliproxySource: UsageSource {
                          sessionAffinity: Bool?, takenAt: Date) -> SourceSnapshot {
         let accounts = list.credentials.map { c in
             var unavailable: [Unavailability] = []
-            if c.upstreamUnavailable { unavailable.append(.upstreamUnavailable) }
+            // cliproxy says when it retries a quota-blocked credential; that end lets
+            // the pool find the refill (Pool rule 5). Without a future retry time,
+            // unavailable has no known end.
+            if c.upstreamUnavailable {
+                if let until = c.unavailableUntil, until > takenAt {
+                    unavailable.append(.coolingDown(until: until))
+                } else {
+                    unavailable.append(.upstreamUnavailable)
+                }
+            }
             if strategy == .weightedRoundRobin, c.routing.weight <= 0 {
                 unavailable.append(.outOfRotation)
             }

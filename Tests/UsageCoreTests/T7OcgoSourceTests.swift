@@ -343,8 +343,10 @@ struct T7OcgoLiveFixtureTests {
             let windows = acct["windows"] as? [String: Any] ?? [:]
             var expected: [WindowKind: Double] = [:]
             for (key, kind) in names {
+                // "rate-limited" is a window at its limit (live capture, T6b): a reading.
                 guard let w = windows[key] as? [String: Any], Self.wellTyped(w),
-                      w["status"] as? String == "ok", let p = Self.number(w["percent"])
+                      ["ok", "rate-limited"].contains(w["status"] as? String ?? ""),
+                      let p = Self.number(w["percent"])
                 else { continue }
                 expected[kind] = min(max(p, 0), 100)
                 let r = mine.first { $0.window == kind }

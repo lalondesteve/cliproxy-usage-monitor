@@ -15,3 +15,8 @@ wrappers and some field names are guesses:
   `short` and `weekly`, `reading.windows` as an object or an array, camelCase fields.
 
 The tests' expected values were worked out by hand from these files and plan.md.
+
+The P0.3 capture in `Fixtures/live/` settled the real `quota/history` shape (account
+fields under `account`, `reading.at`, windows as an array with `id`). These files keep
+the older flat shape, which the parser still reads; `T6bLiveSemanticsTests` covers the
+live one.
