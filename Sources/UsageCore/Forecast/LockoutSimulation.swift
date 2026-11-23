@@ -166,7 +166,7 @@ public enum LockoutSimulation {
     }
 
     /// When a credential can first take traffic; nil when not in this run.
-    private static func usableFrom(_ c: CredentialRoute, strategy: RoutingConfig.Strategy) -> Date? {
+    static func usableFrom(_ c: CredentialRoute, strategy: RoutingConfig.Strategy) -> Date? {
         guard c.enabled else { return nil }
         if strategy == .weightedRoundRobin && c.weight <= 0 { return nil }
         var from = Date.distantPast

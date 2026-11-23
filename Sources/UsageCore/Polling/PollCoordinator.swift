@@ -419,9 +419,30 @@ public actor PollCoordinator: PollControl {
                 sources[kind] = status
             }
         }
-        let m = build(ledger, settings, sources, clock.now)
+        let now = clock.now
+        let m = withForecasts(build(ledger, settings, sources, now), now: now)
         model = m
         continuation.yield(m)
+    }
+
+    /// T11d: each row gets `Forecast.summary` over the history `historyOrigin` chose for
+    /// its provider, unless the builder already set one. A store error leaves that row
+    /// without a forecast (and is kept in `lastStoreError`); publishing goes on.
+    ///
+    /// Cost: per enabled account, two indexed `readings` queries over the last 60 min
+    /// (5-hour and weekly) plus, for local history, two `gaps` queries; then one 300-step
+    /// simulation per row.
+    private func withForecasts(_ m: DashboardModel, now: Date) -> DashboardModel {
+        let rows = m.rows.map { row -> ProviderRow in
+            guard row.forecast == nil else { return row }
+            let history: ForecastHistory = historyOrigin(row.provider) == .fork ? .fork : .local
+            let forecast = attempt {
+                try Forecast.summary(row.provider, ledger: ledger, store: store, history: history, now: now)
+            }
+            return ProviderRow(provider: row.provider, fiveHour: row.fiveHour, weekly: row.weekly,
+                               monthly: row.monthly, unclassified: row.unclassified, forecast: forecast)
+        }
+        return DashboardModel(generatedAt: m.generatedAt, rows: rows, sources: m.sources)
     }
 
     @discardableResult

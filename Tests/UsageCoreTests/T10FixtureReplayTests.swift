@@ -54,7 +54,11 @@ struct T10FixtureReplayTests {
         #expect(model.rows.map(\.provider) == [.claude, .codex, .go])
         #expect(model.sources[.cliproxy] == .ok(at: date("2026-11-22T12:00:00Z")))
         #expect(model.sources[.ocgo] == .ok(at: date("2026-11-22T12:00:00Z")))
-        #expect(model.rows.allSatisfy { $0.forecast == nil })
+        // T11d: every row has a forecast; one capture holds at most two reading times
+        // per account, so there is no burn rate and no lockout forecast yet.
+        #expect(model.rows.allSatisfy {
+            $0.forecast?.poolBurnPerHour == nil && $0.forecast?.lockout == .insufficientData
+        })
     }
 
     /// A sheet that disagrees with the capture fails: the comparison isn't vacuous.

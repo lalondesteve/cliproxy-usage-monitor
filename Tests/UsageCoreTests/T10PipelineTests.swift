@@ -65,7 +65,13 @@ struct T10PipelineTests {
         #expect(hover.remaining == nil)
         #expect(hover.previous?.value == 70)
         #expect(hover.previous?.observedAt == date("2026-11-22T11:50:00Z"))
-        #expect(row.forecast == nil)
+        // T11d: readings at two times only (11:50, 12:02), so no burn rate yet; the
+        // weekly window is unknown, so no reset and no run-out.
+        let forecast = try #require(row.forecast)
+        #expect(forecast.poolBurnPerHour == nil)
+        #expect(forecast.lockout == .insufficientData)
+        #expect(forecast.weekly.map(\.alias) == ["team-a"])
+        #expect(forecast.weekly.first?.runOut == nil && forecast.weekly.first?.resets == nil)
     }
 }
 

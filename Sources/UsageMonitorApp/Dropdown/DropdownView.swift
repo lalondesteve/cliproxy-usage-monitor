@@ -70,10 +70,18 @@ struct ProviderRowView: View {
             if let both = DropdownText.usableAndQuota(five) {
                 indented(Text(both).foregroundStyle(palette.textMuted))
             }
-            if let forecast = row.forecast, let text = DropdownText.lockout(forecast.lockout, clock) {
-                indented(Text(text).foregroundStyle(palette.textMuted))
+            if let forecast = row.forecast {
+                indented(Text(DropdownText.forecastLine(forecast, clock))
+                    .foregroundStyle(palette.textMuted)
+                    .fixedSize(horizontal: false, vertical: true))
             }
             if row.weekly != nil { meterRow("weekly", row.weekly, palette: palette) }
+            if let forecast = row.forecast {
+                ForEach(DropdownText.weeklyRunOuts(forecast, clock), id: \.self) { line in
+                    indented(Text(line).foregroundStyle(palette.textMuted)
+                        .fixedSize(horizontal: false, vertical: true))
+                }
+            }
             if row.monthly != nil { meterRow("monthly", row.monthly, palette: palette) }
         }
         .contentShape(Rectangle())

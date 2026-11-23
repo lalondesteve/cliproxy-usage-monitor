@@ -100,20 +100,14 @@ struct RowHover: Equatable, Sendable {
 
     static func forecast(_ f: ForecastSummary, _ c: DropdownClock) -> Section? {
         var notes: [String] = []
-        if let burn = f.poolBurnPerHour { notes.append("burn \(DropdownText.percent(burn)) of pool per hour") }
-        switch f.lockout {
-        case .withheld(let reason): notes.append("no lockout forecast: \(reason)")
-        case .insufficientData: notes.append("no lockout forecast yet: not enough readings")
-        default: if let t = DropdownText.lockout(f.lockout, c) { notes.append(t) }
-        }
+        if let burn = f.poolBurnPerHour { notes.append("burn \(DropdownText.burnPercent(burn)) of pool per hour") }
+        notes.append(DropdownText.lockout(f.lockout, c))
         // A nil runOut means either "lasts until its reset" or "no burn rate", so it
         // says nothing reassuring: only accounts with a run-out time are listed.
         for w in f.weekly {
-            guard let runOut = w.runOut else { continue }
-            var s = "\(w.alias): weekly runs out \(DropdownText.clock(runOut, c))"
-            if let r = w.resets { s += ", resets \(DropdownText.clock(r, c))" }
-            notes.append(s)
+            guard let text = ForecastText.weekly(w, timeZone: c.timeZone) else { continue }
+            notes.append("\(w.alias): weekly \(text)")
         }
-        return notes.isEmpty ? nil : Section(title: "Forecast", lines: [], notes: notes)
+        return Section(title: "Forecast", lines: [], notes: notes)
     }
 }

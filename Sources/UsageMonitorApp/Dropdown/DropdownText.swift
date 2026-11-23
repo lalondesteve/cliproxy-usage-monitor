@@ -165,11 +165,57 @@ enum DropdownText {
         }
     }
 
-    static func lockout(_ l: LockoutForecast, _ c: DropdownClock) -> String? {
+    // MARK: Forecast (plan.md "Forecast": text only)
+
+    /// The 5-hour lockout forecast: "safe for 5h", "lockout at 17:09 to 17:20", or why
+    /// there is none. When a clock change falls between the two times, both carry
+    /// their zone ("lockout at 01:50 EDT to 01:20 EST") so the order stays clear.
+    static func lockout(_ l: LockoutForecast, _ c: DropdownClock) -> String {
         switch l {
-        case .safe: "safe for 5h"
-        case .lockout(let from, let to): "lockout at \(clock(from, c)) to \(clock(to, c))"
-        case .withheld, .insufficientData: nil
+        case .safe:
+            return "safe for 5h"
+        case .lockout(let from, let to):
+            guard c.timeZone.secondsFromGMT(for: from) != c.timeZone.secondsFromGMT(for: to) else {
+                return "lockout at \(clock(from, c)) to \(clock(to, c))"
+            }
+            return "lockout at \(clock(from, c)) \(zone(from, c)) to \(clock(to, c)) \(zone(to, c))"
+        case .withheld(let reason):
+            return "no lockout forecast: \(reason)"
+        case .insufficientData:
+            return "no lockout forecast yet: not enough readings"
+        }
+    }
+
+    /// The zone's abbreviation at `date`: "EDT", or "GMT+9" where there is none.
+    static func zone(_ date: Date, _ c: DropdownClock) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = c.timeZone
+        f.dateFormat = "zzz"
+        return f.string(from: date)
+    }
+
+    /// A pool-share rate as printed: "18%", or "<1%" for a rate that rounds to 0 but
+    /// isn't 0.
+    static func burnPercent(_ perHour: Double) -> String {
+        perHour > 0 && perHour < 0.5 ? "<1%" : percent(perHour)
+    }
+
+    /// The pool-share burn rate under the 5-hour line: "burn 18%/h", "burn <1%/h".
+    static func burn(_ perHour: Double) -> String { "burn \(burnPercent(perHour))/h" }
+
+    /// Under the 5-hour line: "burn 18%/h · lockout at 17:09 to 17:20".
+    static func forecastLine(_ f: ForecastSummary, _ c: DropdownClock) -> String {
+        ([f.poolBurnPerHour.map(burn)] + [lockout(f.lockout, c)]).compactMap { $0 }
+            .joined(separator: " · ")
+    }
+
+    /// Under the weekly line, one per account that runs out before its reset:
+    /// "claude-1 runs out Wed 18:00, resets Thu 09:00". A nil run-out ("lasts until its
+    /// reset" or "no rate yet") says nothing worth a line.
+    static func weeklyRunOuts(_ f: ForecastSummary, _ c: DropdownClock) -> [String] {
+        f.weekly.compactMap { w in
+            ForecastText.weekly(w, timeZone: c.timeZone).map { "\(w.alias) \($0)" }
         }
     }
 }
