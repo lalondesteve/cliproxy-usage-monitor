@@ -9,7 +9,7 @@ enum SetupMessages {
         case .unauthorized:
             switch kind {
             case .cliproxy:
-                "cliproxy refused the request: wrong management key, or a URL whose management paths are blocked. Check both before retrying: 5 failed attempts ban this Mac's IP for 30 minutes."
+                "The management request was refused: wrong management key, or a URL whose management paths are blocked. Check both before retrying: cliproxy bans this Mac's IP for 30 minutes after 5 wrong keys."
             case .ocgo:
                 "Wrong client token. Check the token and try again."
             }

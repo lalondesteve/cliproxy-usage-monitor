@@ -23,8 +23,8 @@ struct T9cMessageTests {
             #expect(text.hasSuffix("."), "\(error): one sentence")
             switch error {
             case .unauthorized:
-                #expect(text.contains("refused the request"))
-                #expect(text.contains("5 failed attempts"))
+                #expect(text.contains("management request was refused"))
+                #expect(text.contains("after 5 wrong keys"))
             case .remoteManagementDisabled:
                 #expect(text.contains("allow-remote"))
                 #expect(text.contains("Remote management is disabled"))
