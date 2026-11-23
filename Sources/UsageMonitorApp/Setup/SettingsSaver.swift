@@ -42,7 +42,7 @@ struct KeychainSaveError: Error, Equatable, CustomStringConvertible {
     let reason: String
 
     var description: String {
-        let failure = "the \(SetupForm.name(failed)) secret couldn't be written to the Keychain (\(reason))"
+        let failure = "the \(SetupForm.name(failed)) \(failed == .cliproxy ? "management key" : "client token") couldn't be written to the Keychain (\(reason))"
         let saved = SourceKind.allCases.filter { committed[$0] != nil }.map(SetupForm.name)
         return saved.isEmpty ? failure
             : "\(failure). The \(saved.joined(separator: " and ")) settings were saved"

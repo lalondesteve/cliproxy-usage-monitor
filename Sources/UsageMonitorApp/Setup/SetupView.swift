@@ -16,13 +16,11 @@ struct SetupView: View {
                         Text("Compact").tag(MenubarStyle.compact)
                     }
                     .pickerStyle(.segmented)
+                    .help("Normal shows each provider's logo and %. Compact shows one icon that expands on click.")
                 }
-                Section {
+                Section("Freshness") {
                     TextField("Stale after (minutes)", text: $model.form.staleMinutes)
-                } header: {
-                    Text("Freshness")
-                } footer: {
-                    Text("Readings older than this are marked stale.").foregroundStyle(.secondary)
+                        .help("Readings older than this are marked stale in the dropdown.")
                 }
                 aliasSection
             }
@@ -37,27 +35,24 @@ struct SetupView: View {
     private var cliproxySection: some View {
         Section {
             TextField("URL", text: $model.form.cliproxyURL, prompt: Text(verbatim: "http://cliproxy:8317"))
+                .help("Base URL or /management.html URL.")
             SecureField("Management key", text: $model.form.cliproxyKey.value)
             unreadableNote(model.form.cliproxyKey.baseline)
             testRow(.cliproxy)
         } header: {
             Text("cliproxy (Claude and Codex)")
-        } footer: {
-            Text("The management page URL works too. Five rejected keys ban this Mac's IP for 30 minutes, so Test sends one request and never retries.")
-                .foregroundStyle(.secondary)
         }
     }
 
     private var ocgoSection: some View {
         Section {
             TextField("URL", text: $model.form.ocgoURL, prompt: Text(verbatim: "http://cliproxy:8320"))
+                .help("Leave blank to hide OpenCode Go.")
             SecureField("Client token", text: $model.form.ocgoToken.value)
             unreadableNote(model.form.ocgoToken.baseline)
             testRow(.ocgo)
         } header: {
             Text("ocgo-proxy (OpenCode Go, optional)")
-        } footer: {
-            Text("Leave the URL empty to hide the Go row.").foregroundStyle(.secondary)
         }
     }
 
@@ -67,9 +62,11 @@ struct SetupView: View {
                 HStack {
                     TextField("Credential file", text: $row.fileKey, prompt: Text(verbatim: "claude-x@example.com.json"))
                         .labelsHidden()
+                        .help("Duplicate credential filename from cliproxy, e.g. claude-you@example.com.json.")
                     Image(systemName: "arrow.right").foregroundStyle(.secondary)
-                    TextField("Identity", text: $row.identity, prompt: Text(verbatim: "1a2b3c4d"))
+                    TextField("Target account", text: $row.identity, prompt: Text(verbatim: "1a2b3c4d or id:email"))
                         .labelsHidden()
+                        .help("Target account's 8-char filename hash (e.g. 1a2b3c4d) or Codex workspace ID. Append :email if the two files have different emails.")
                     Button {
                         model.form.aliases.removeAll { $0.id == row.id }
                     } label: {
@@ -80,18 +77,18 @@ struct SetupView: View {
                 }
             }
             Button("Add alias") { model.form.aliases.append(AliasRow()) }
+                .help(Self.aliasHelp)
         } header: {
-            Text("Identity aliases")
-        } footer: {
-            Text("Maps a credential file to another file for the same login, so the two count once. Give the other file's hash (1a2b3c4d) or its full identity (1a2b3c4d:x@example.com).")
-                .foregroundStyle(.secondary)
+            Text("Account aliases (optional)").help(Self.aliasHelp)
         }
     }
+
+    private static let aliasHelp = "Rarely needed. Merge two credential files for the same login so they count as one account."
 
     @ViewBuilder
     private func unreadableNote(_ baseline: SecretBaseline) -> some View {
         if case .unreadable(let reason) = baseline {
-            Text("The stored value couldn't be read (\(reason)). Leave the field empty to keep it, or enter a new one.")
+            Text("Couldn't read from Keychain (\(reason)). Leave blank to keep the saved value, or enter a new one.")
                 .font(.caption)
                 .foregroundStyle(.orange)
         }
@@ -125,7 +122,7 @@ struct SetupView: View {
             case .failed(let text): Text(text).foregroundStyle(.red)
             }
             if model.phase == .loading {
-                Text("Reading the Keychain…").foregroundStyle(.secondary)
+                Text("Reading Keychain…").foregroundStyle(.secondary)
             }
             Spacer()
             Button("Save") { Task { await model.save() } }

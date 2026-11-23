@@ -23,28 +23,28 @@ struct T9cMessageTests {
             #expect(text.hasSuffix("."), "\(error): one sentence")
             switch error {
             case .unauthorized:
-                #expect(text.contains("rejected the management key"))
+                #expect(text.contains("Wrong management key"))
                 #expect(text.contains("401"))
                 #expect(text.contains("5 failed attempts"))
             case .remoteManagementDisabled:
                 #expect(text.contains("allow-remote"))
-                #expect(text.contains("remote management turned off"))
+                #expect(text.contains("Remote management is disabled"))
             case .ipBanned:
                 #expect(text.contains("banned"))
-                #expect(text.contains("wait 30 minutes"))
+                #expect(text.contains("Wait 30 minutes"))
                 #expect(text.contains("5 failed attempts"))
             case .tlsUntrusted:
-                #expect(text.contains("certificate isn't trusted"))
-                #expect(text.contains("macOS Keychain"))
+                #expect(text.contains("Untrusted TLS certificate"))
+                #expect(text.contains("Keychain Access"))
             case .timeout:
-                #expect(text.contains("didn't answer in time"))
+                #expect(text.contains("timed out"))
             case .unreachable:
-                #expect(text.contains("couldn't be reached"))
+                #expect(text.contains("Couldn't reach the server"))
             case .http(let code):
                 #expect(text.contains("HTTP \(code)"))
             case .decoding(let detail):
                 #expect(text.contains(detail))
-                #expect(text.contains("not with the data the app expects"))
+                #expect(text.contains("Unexpected response"))
             }
         }
         #expect(sentences.count == all.count)
@@ -59,7 +59,7 @@ struct T9cMessageTests {
     /// cliproxy's ban after 5 bad keys doesn't apply to ocgo-proxy.
     @Test func ocgoRejectedTokenDoesNotMentionTheBan() {
         let text = SetupMessages.sentence(for: .unauthorized, kind: .ocgo)
-        #expect(text.contains("ocgo-proxy rejected the client token"))
+        #expect(text.contains("Wrong client token"))
         #expect(text.contains("401"))
         #expect(!text.contains("ban"))
         #expect(!text.contains("failed attempts"))

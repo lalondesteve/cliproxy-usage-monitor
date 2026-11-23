@@ -67,15 +67,15 @@ enum SetupFormError: Error, Equatable, Sendable {
         case .invalidURL(let kind):
             "The \(SetupForm.name(kind)) URL isn't valid: use http:// or https:// with a host."
         case .credentialsInURL(let kind):
-            "Remove the user name and password from the \(SetupForm.name(kind)) URL and put the secret in the \(kind == .cliproxy ? "Management key" : "Client token") field; URLs are saved in plain text."
+            "Don't include credentials in the \(SetupForm.name(kind)) URL (URLs are saved in plain text). Use the \(kind == .cliproxy ? "Management key" : "Client token") field instead."
         case .missingURL(let kind):
             "Enter the \(SetupForm.name(kind)) URL first."
         case .missingKey:
             "Enter the cliproxy management key first."
         case .invalidStaleMinutes:
-            "The stale threshold must be a whole number of minutes, from 1 to \(SetupForm.maxStaleMinutes)."
+            "Stale after must be a whole number from 1 to \(SetupForm.maxStaleMinutes) minutes."
         case .incompleteAlias(let row):
-            "Alias row \(row) needs both a credential file and an identity."
+            "Alias row \(row) needs both a credential filename and a target account."
         case .duplicateAlias(let fileKey):
             "The credential file \(fileKey) is listed more than once."
         }
