@@ -31,9 +31,10 @@ struct TaskScheduler: OneShotScheduling {
 /// Click handling for the status item (plan.md "Gauge design", Menubar setting).
 ///
 /// - Normal: every click opens the dropdown.
-/// - Compact: a click while collapsed expands into the logos and % for 3 s, then the
-///   item collapses. A click while expanded opens the dropdown and leaves the 3 s
-///   deadline as it was (as the mockup's timer does).
+/// - Compact: a click while collapsed expands into the logos and % for 3 s and opens
+///   the dropdown at the same time (user, 2026-11-23); then the item collapses. A
+///   click while expanded toggles the dropdown, as in Normal, and leaves the 3 s
+///   deadline as it was.
 /// - With nothing to show (`hasEntries == false`), a click opens the dropdown
 ///   directly, since expanding would show nothing.
 @MainActor
@@ -44,7 +45,7 @@ final class CompactExpander {
     }
 
     enum ClickResult: Equatable {
-        case expanded
+        case expandedAndOpened
         case openDropdown
     }
 
@@ -79,7 +80,9 @@ final class CompactExpander {
             collapseToken = scheduler.schedule(after: Self.expandDuration) { [weak self] in
                 self?.setState(.collapsed)
             }
-            return .expanded
+            // Expand first, so the dropdown opens under the widened item.
+            onOpenDropdown?()
+            return .expandedAndOpened
         }
         onOpenDropdown?()
         return .openDropdown

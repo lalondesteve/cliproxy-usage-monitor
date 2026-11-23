@@ -156,16 +156,17 @@ struct T9aExpanderTests {
         return (expander, scheduler, opened)
     }
 
-    @Test func clickExpandsForThreeSeconds() {
+    @Test func clickExpandsForThreeSecondsAndOpensTheDropdown() {
         let (e, clock, opened) = make(.compact)
         let changes = Counter()
         e.onStateChange = { changes.value += 1 }
         #expect(e.state == .collapsed)
         #expect(!e.showsProviders)
 
-        #expect(e.click() == .expanded)
+        #expect(e.click() == .expandedAndOpened)
         #expect(e.state == .expanded)
         #expect(e.showsProviders)
+        #expect(opened.value == 1)
 
         clock.advance(by: 2.9)
         #expect(e.state == .expanded)
@@ -173,25 +174,26 @@ struct T9aExpanderTests {
         #expect(e.state == .collapsed)
         #expect(!e.showsProviders)
         #expect(changes.value == 2)
-        #expect(opened.value == 0)
+        #expect(opened.value == 1)
         #expect(clock.pendingCount == 0)
     }
 
-    @Test func clickWhileExpandedOpensTheDropdown() {
+    @Test func clickWhileExpandedTogglesTheDropdown() {
+        // The first click opened the dropdown; the second toggles it (closes it).
         let (e, clock, opened) = make(.compact)
         e.click()
         clock.advance(by: 1)
         #expect(e.click() == .openDropdown)
-        #expect(opened.value == 1)
+        #expect(opened.value == 2)
         // The second click keeps the first click's 3 s deadline, dropdown open or not.
         clock.advance(by: 1.9)
         #expect(e.state == .expanded)
         clock.advance(by: 0.1)
         #expect(e.state == .collapsed)
         #expect(!e.showsProviders)
-        // The next click expands again rather than opening the dropdown.
-        #expect(e.click() == .expanded)
-        #expect(opened.value == 1)
+        // The next click expands again and opens the dropdown with it.
+        #expect(e.click() == .expandedAndOpened)
+        #expect(opened.value == 3)
     }
 
     @Test func compactWithNothingToShowOpensTheDropdownAtOnce() {
@@ -202,16 +204,16 @@ struct T9aExpanderTests {
         #expect(e.state == .collapsed)
         #expect(clock.pendingCount == 0)
         e.hasEntries = true
-        #expect(e.click() == .expanded)
-        #expect(opened.value == 1)
+        #expect(e.click() == .expandedAndOpened)
+        #expect(opened.value == 2)
     }
 
     @Test func clickAfterCollapseExpandsAgain() {
         let (e, clock, opened) = make(.compact)
         e.click()
         clock.advance(by: 3)
-        #expect(e.click() == .expanded)
-        #expect(opened.value == 0)
+        #expect(e.click() == .expandedAndOpened)
+        #expect(opened.value == 2)
         clock.advance(by: 3)
         #expect(e.state == .collapsed)
     }

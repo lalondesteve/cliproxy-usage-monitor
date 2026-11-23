@@ -6,8 +6,8 @@ import UsageCore
 ///
 /// - Normal: each configured provider's logo and usable 5-hour %; a click opens the
 ///   dropdown.
-/// - Compact: the three-spoke glyph; a click expands it for 3 s, a click while
-///   expanded opens the dropdown (`CompactExpander`).
+/// - Compact: the three-spoke glyph; a click expands it for 3 s and opens the
+///   dropdown (`CompactExpander`).
 ///
 /// The dropdown is whatever `onOpenDropdown` does (T9b's popover, anchored on
 /// `anchorView`). Right-click or control-click opens the menu (Settings, Refresh,

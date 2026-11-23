@@ -520,8 +520,9 @@ the last stored poll to launch.
 
 Outcome: a status item controller driven by `DashboardModel` and the menubar style
 setting. Normal shows logo + usable 5-hour % per provider (a range shows as
-"41-74%"). Compact shows the three-spoke glyph; a click expands it for 3 s; a click
-while expanded opens the dropdown.
+"41-74%"). Compact shows the three-spoke glyph; a click expands it for 3 s and opens
+the dropdown at the same time (changed 2026-11-23); a click while expanded toggles the
+dropdown.
 
 - Acceptance: a pure layout function puts a 14 px glyph, 3 px gap and 10 px between
   providers (unit-tested on widths); the expand state machine, with an injected
