@@ -68,7 +68,9 @@ struct T9bDropdownTests {
             #expect(p.series.count == 4)
             for (c, want) in zip(p.series, four) {
                 let got = rgb(c)
-                #expect(abs(got.0 - want.0) + abs(got.1 - want.1) + abs(got.2 - want.2) < 0.01)
+                // Swift 6.2 times out type-checking this sum inside #expect, so it is computed first.
+                let error: Double = abs(got.0 - want.0) + abs(got.1 - want.1) + abs(got.2 - want.2)
+                #expect(error < 0.01)
             }
             for i in 0..<p.series.count { #expect(p.fill(.series(i)) == p.series[i]) }
             #expect(distance(p.fill(.series(0)), p.fill(.series(6))) > 0.3)
