@@ -5,90 +5,83 @@ import UsageCore
 struct OverlapRect: Equatable, Sendable {
     let alias: String
     let style: BarStyle
+    let kind: Kind
     let minX: CGFloat
     let maxX: CGFloat
     /// Square ends (plan.md "Gauge design": any rounding at most 1 px). Always 0.
     let cornerRadius: CGFloat
 
     var width: CGFloat { maxX - minX }
+
+    enum Kind: Equatable, Sendable { case bar, tick }
+    static let tickWidth: CGFloat = 2
 }
 
 /// The overlap line (plan.md "Gauge design", option E): every bar runs from 0 to its
 /// remaining %, on the 0-100 scale of `width`. Returned in drawing order, fullest
 /// first, so the emptiest is drawn last and ends up on top. Equal values keep their
-/// input order. Bars with nothing left have no width and are left out.
+/// input order.
+///
+/// A seat with nothing left, or one that can't take traffic now (`greyed`: Pool rule 4
+/// counts it as 0 in the usable share), has no bar: it is a 2 pt vertical tick at 0 in
+/// its own color, drawn after the bars. Several ticks sit side by side, 1 pt apart, in
+/// input order (user, 2026-11-23: "it sits as a vertical line at 0").
 func overlapRects(bars: [GaugeBar], width: CGFloat) -> [OverlapRect] {
-    bars.enumerated()
+    let drawn = bars.enumerated()
         .sorted { a, b in
             a.element.remaining != b.element.remaining
                 ? a.element.remaining > b.element.remaining
                 : a.offset < b.offset
         }
-        .compactMap { _, bar in
+        .compactMap { _, bar -> OverlapRect? in
             let w = width * CGFloat(min(max(bar.remaining, 0), 100)) / 100
-            guard w > 0 else { return nil }
-            return OverlapRect(alias: bar.alias,
-                               style: bar.greyed ? .grey : .series(bar.colorIndex),
+            guard w > 0, !bar.greyed else { return nil }
+            return OverlapRect(alias: bar.alias, style: .series(bar.colorIndex), kind: .bar,
                                minX: 0, maxX: w, cornerRadius: 0)
         }
-}
-
-/// The weekly and monthly meter: one pooled bar plus the weekly pace marker.
-struct MeterGeometry: Equatable, Sendable {
-    /// The pooled value's lower bound: a range fills only what is certain.
-    let fillWidth: CGFloat
-    /// nil when the gauge has no pace (monthly, or hidden by the weekly rule).
-    let paceX: CGFloat?
-
-    init(gauge: WindowGauge?, width: CGFloat) {
-        let lower = gauge?.quota?.lower ?? 0
-        fillWidth = width * CGFloat(min(max(lower, 0), 100)) / 100
-        paceX = gauge?.pace.map { width * CGFloat(min(max($0, 0), 1)) }
+    let ticks = bars.filter { $0.greyed || $0.remaining <= 0 }.enumerated().map { i, bar in
+        let x = CGFloat(i) * (OverlapRect.tickWidth + 1)
+        return OverlapRect(alias: bar.alias, style: .series(bar.colorIndex), kind: .tick,
+                           minX: x, maxX: x + OverlapRect.tickWidth, cornerRadius: 0)
     }
+    return drawn + ticks
 }
 
-/// The 5-hour line. 8 pt thick, as in the mockup.
+/// Where the weekly pace marker goes; nil when the gauge has no pace (monthly, or
+/// hidden by the weekly rule).
+func paceX(_ gauge: WindowGauge?, width: CGFloat) -> CGFloat? {
+    gauge?.pace.map { width * CGFloat(min(max($0, 0), 1)) }
+}
+
+/// One window's line: the overlap bars on the track, the zero ticks standing 2 pt above
+/// and below the line, and (weekly) the pace marker, the full height of the view.
 struct OverlapLineView: View {
     let bars: [GaugeBar]
     let palette: DropdownPalette
-    static let thickness: CGFloat = 8
+    var pace: Double? = nil
+    var thickness: CGFloat = 8
+    static let height: CGFloat = 12
 
     var body: some View {
         Canvas { context, size in
-            context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(palette.track))
+            let y = (size.height - thickness) / 2
+            context.fill(Path(CGRect(x: 0, y: y, width: size.width, height: thickness)),
+                         with: .color(palette.track))
             for r in overlapRects(bars: bars, width: size.width) {
-                let rect = CGRect(x: r.minX, y: 0, width: r.width, height: size.height)
+                let rect = r.kind == .bar
+                    ? CGRect(x: r.minX, y: y, width: r.width, height: thickness)
+                    : CGRect(x: r.minX, y: max(y - 2, 0), width: r.width, height: min(thickness + 4, size.height))
                 context.fill(Path(rect), with: .color(palette.fill(r.style)))
             }
-        }
-        .frame(height: Self.thickness)
-        .accessibilityElement()
-        .accessibilityLabel(bars.map { "\($0.alias) \(Int($0.remaining.rounded()))%" }
-            .joined(separator: ", "))
-    }
-}
-
-/// Weekly and monthly: a thinner pooled meter; the pace marker is a 2 pt tick that
-/// stands out above and below it.
-struct MeterView: View {
-    let gauge: WindowGauge?
-    let palette: DropdownPalette
-    static let height: CGFloat = 12
-    static let thickness: CGFloat = 6
-
-    var body: some View {
-        Canvas { context, size in
-            let y = (size.height - Self.thickness) / 2
-            let g = MeterGeometry(gauge: gauge, width: size.width)
-            context.fill(Path(CGRect(x: 0, y: y, width: size.width, height: Self.thickness)),
-                         with: .color(palette.track))
-            context.fill(Path(CGRect(x: 0, y: y, width: g.fillWidth, height: Self.thickness)),
-                         with: .color(palette.meter))
-            if let x = g.paceX {
+            if let pace {
+                let x = size.width * CGFloat(min(max(pace, 0), 1))
                 let tick = CGRect(x: min(max(x - 1, 0), size.width - 2), y: 0, width: 2, height: size.height)
                 context.fill(Path(tick), with: .color(palette.textPrimary))
             }
         }
         .frame(height: Self.height)
+        .accessibilityElement()
+        .accessibilityLabel(bars.map { "\($0.alias) \(Int($0.remaining.rounded()))%" }
+            .joined(separator: ", "))
     }
 }

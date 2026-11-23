@@ -539,7 +539,7 @@ stale marks, and auth or error state per source.
 
 - Acceptance: a pure function `overlapRects(bars:width:)` gives, for remaining 80,
   50, 35 at width 200, rects 0-160, 0-100, 0-70, drawn in that order (emptiest on
-  top), square ends; greyed bars use the grey style; the countdown text comes from
+  top), square ends; greyed bars and empty seats are ticks at 0 in their own color (superseded 2026-11-23: no grey); the countdown text comes from
   `nextRefill` or `allFull`; renders the E1 to E4 models to PNGs
   (`bitmapImageRepForCachingDisplay`) for the user to compare with
   `docs/mockups/gauges-overlap.html`; with E8's no-bar case, the unclassified

@@ -22,23 +22,25 @@ struct T9bDropdownTests {
         #expect(rects.map(\.style) == [.series(0), .series(1), .series(2)])
     }
 
-    @Test func greyedBarsUseTheGreyStyle() {
-        // E2: B is blocked by its weekly window.
+    @Test func blockedSeatsAreTicksAtZeroInTheirOwnColor() {
+        // E2: claude-2 (50 left) is blocked by its weekly window, so it counts 0 in the
+        // usable share and sits as a 2 pt tick at 0, drawn after the bars, in color 1.
         let rects = overlapRects(bars: E.e2Five.bars, width: 200)
-        #expect(rects.map(\.alias) == ["claude-1", "claude-2", "claude-3"])
-        #expect(rects.map(\.style) == [.series(0), .grey, .series(2)])
-        #expect(rects.map(\.maxX) == [160, 100, 70])
-        for palette in [DropdownPalette.light, .dark] {
-            #expect(palette.fill(.grey) == palette.grey)
-            #expect(!palette.series.contains(palette.fill(.grey)))
-        }
+        #expect(rects.map(\.alias) == ["claude-1", "claude-3", "claude-2"])
+        #expect(rects.map(\.kind) == [.bar, .bar, .tick])
+        #expect(rects.map(\.style) == [.series(0), .series(2), .series(1)])
+        #expect(rects.map(\.minX) == [0, 0, 0])
+        #expect(rects.map(\.maxX) == [160, 70, 2])
     }
 
-    @Test func overlapRectsClampAndDropEmptyBars() {
+    @Test func overlapRectsClampAndTickEmptySeats() {
+        // Two empty seats: ticks side by side at 0, 2 pt wide, 1 pt apart, input order.
         let rects = overlapRects(bars: [E.bar("full", 0, 120), E.bar("empty", 1, 0), E.bar("neg", 2, -5)],
                                  width: 200)
-        #expect(rects.map(\.alias) == ["full"])
-        #expect(rects.first?.maxX == 200)
+        #expect(rects.map(\.alias) == ["full", "empty", "neg"])
+        #expect(rects.map(\.kind) == [.bar, .tick, .tick])
+        #expect(rects.map(\.minX) == [0, 0, 3])
+        #expect(rects.map(\.maxX) == [200, 2, 5])
         #expect(overlapRects(bars: [], width: 200).isEmpty)
     }
 
@@ -59,28 +61,30 @@ struct T9bDropdownTests {
             let (x, y) = (rgb(a), rgb(b))
             return abs(x.0 - y.0) + abs(x.1 - y.1) + abs(x.2 - y.2)
         }
+        // The user's four colors (2026-11-23), in order, in both schemes.
+        let four: [(Double, Double, Double)] = [(0xFF, 0x9E, 0x64), (0x7A, 0xA2, 0xF7), (0x9E, 0xCE, 0x6A),
+                                                (0xBB, 0x9A, 0xF7)].map { ($0.0 / 255, $0.1 / 255, $0.2 / 255) }
         for p in [DropdownPalette.light, .dark] {
+            #expect(p.series.count == 4)
+            for (c, want) in zip(p.series, four) {
+                let got = rgb(c)
+                #expect(abs(got.0 - want.0) + abs(got.1 - want.1) + abs(got.2 - want.2) < 0.01)
+            }
             for i in 0..<p.series.count { #expect(p.fill(.series(i)) == p.series[i]) }
             #expect(distance(p.fill(.series(0)), p.fill(.series(6))) > 0.3)
             #expect(distance(p.fill(.series(6)), p.fill(.series(7))) > 0.3)
-            #expect(distance(p.fill(.series(6)), p.fill(.grey)) > 0.3)
             // Stable: the same index always gives the same color.
             #expect(rgb(p.fill(.series(9))) == rgb(p.fill(.series(9))))
         }
     }
 
-    @Test func meterFillsTheCertainPartAndPlacesThePaceMarker() {
-        // E11: pace 75% of the week left -> marker at 75% of the scale.
+    @Test func weeklyPlacesThePaceMarker() {
+        // E11: pace 75% of the week left -> marker at 75% of the scale. No pace, no marker.
         let g = WindowGauge(window: .weekly, known: 2, total: 2, quota: PercentRange(exact: 59),
                             usable: PercentRange(exact: 59), bars: [], nextRefill: nil, allFull: false,
                             pace: 0.75, accounts: [])
-        let m = MeterGeometry(gauge: g, width: 200)
-        #expect(m.paceX == 150)
-        #expect(m.fillWidth == 118)
-        // A range fills only its lower bound; no pace hides the marker.
-        let codex = MeterGeometry(gauge: E.e8Codex.weekly, width: 200)
-        #expect(codex.fillWidth == 60)
-        #expect(MeterGeometry(gauge: E.e4bFive, width: 200).paceX == nil)
+        #expect(paceX(g, width: 200) == 150)
+        #expect(paceX(E.e4bFive, width: 200) == nil)
     }
 
     // MARK: numbers and countdown
@@ -184,7 +188,7 @@ struct T9bDropdownTests {
         #expect(five.title == "5-hour: 38% usable, quota 55%")
         #expect(five.lines.map(\.label) == ["claude-1", "claude-2", "claude-3"])
         #expect(five.lines.map(\.value) == ["80%", "50%", "35%"])
-        #expect(five.lines[1].swatch == .grey)
+        #expect(five.lines[1].swatch == .series(1))
         #expect(five.lines[1].detail.contains("weekly limit until Thu 09:00"))
         #expect(five.lines[2].detail.contains("resets 14:10"))
         #expect(five.lines[2].detail.contains("read 2m ago"))

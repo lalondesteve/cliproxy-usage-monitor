@@ -83,7 +83,7 @@ struct RowHover: Equatable, Sendable {
         }
         if a.stale { parts.append("stale") }
         return Line(
-            swatch: bar.map { $0.greyed ? .grey : .series($0.colorIndex) },
+            swatch: bar.map { .series($0.colorIndex) },
             label: a.alias,
             value: a.remaining.map(DropdownText.percent) ?? "unknown",
             detail: parts.joined(separator: " · "),

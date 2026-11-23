@@ -50,16 +50,20 @@ struct T9bSnapshotTests {
         let png = try #require(DropdownSnapshot.png(view, scheme: .light, scale: 1))
         let rep = try #require(NSBitmapImageRep(data: png))
         let y = rep.pixelsHigh / 2
-        func color(_ x: Int) -> NSColor { rep.colorAt(x: x, y: y)!.usingColorSpace(.sRGB)! }
+        // `bitmapImageRepForCachingDisplay` follows the main screen's scale, so the
+        // rep can be 2x even when asked for 1x; sample in points.
+        let k = rep.pixelsWide / 200
+        func color(_ x: Int) -> NSColor { rep.colorAt(x: x * k, y: y)!.usingColorSpace(.sRGB)! }
         func close(_ a: NSColor, _ b: Color) -> Bool {
             let b = NSColor(b).usingColorSpace(.sRGB)!
             return abs(a.redComponent - b.redComponent) < 0.03
                 && abs(a.greenComponent - b.greenComponent) < 0.03
                 && abs(a.blueComponent - b.blueComponent) < 0.03
         }
+        #expect(close(color(1), palette.series[1]))    // B blocked: tick at 0
         #expect(close(color(35), palette.series[2]))   // C (35) on top up to 70
-        #expect(close(color(85), palette.grey))        // B greyed up to 100
-        #expect(close(color(130), palette.series[0]))  // A up to 160
+        #expect(close(color(85), palette.series[0]))   // A up to 160
+        #expect(close(color(130), palette.series[0]))
         #expect(close(color(180), palette.track))      // empty track after
     }
 

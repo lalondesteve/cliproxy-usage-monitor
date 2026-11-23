@@ -121,7 +121,7 @@ struct ProviderRowView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(palette.textMuted)
                     .frame(width: DropdownLayout.nameWidth, alignment: .trailing)
-                MeterView(gauge: g, palette: palette)
+                OverlapLineView(bars: g?.bars ?? [], palette: palette, pace: g?.pace, thickness: 6)
                 number(DropdownText.headline(g), size: 12, palette: palette)
             }
             if let notes = knownAndFreshness(g, palette: palette) {

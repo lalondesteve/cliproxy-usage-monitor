@@ -195,7 +195,10 @@ subscription within a provider has the same plan.
    weekly, Go weekly or monthly) or otherwise unavailable (cliproxy `unavailable`,
    ocgo `available: false`, cooling down, or not the `forced_account`) still shows its
    5-hour quota. In the
-   5-hour gauge, grey it out and count it as 0 in "usable now". The menubar % and
+   5-hour gauge, count it as 0 in "usable now" and draw it as a vertical tick at 0 in
+   its own color, as for a seat with nothing left (no grey anywhere; decided
+   2026-11-23). The weekly and monthly lines are overlap lines too, one bar per seat,
+   in the account colors #ff9e64, #7aa2f7, #9ece6a, #bb9af7. The menubar % and
    the number beside the 5-hour line are the usable share; when it differs from the
    raw quota, the row's hover card shows both ("usable 30%, quota 55%").
 5. **Next refill vs full recovery.** Accounts reset at different times. Report the
