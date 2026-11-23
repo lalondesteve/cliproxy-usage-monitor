@@ -45,6 +45,10 @@ final class SetupModel {
     private var formGeneration = 0
     /// Bumped per source by each Test and by each load.
     private var testGenerations: [SourceKind: Int] = [:]
+    /// Keys cliproxy rejected (401) on Test since its last successful Test. cliproxy bans
+    /// this Mac's IP after 5, so the next Test asks first. Survives reopening the window,
+    /// since the ban counts on the server.
+    private(set) var cliproxyRejections = 0
 
     init(settings: AppSettings, saver: SettingsSaver) {
         self.settings = settings
@@ -53,6 +57,11 @@ final class SetupModel {
     }
 
     var isBusy: Bool { phase == .loading || saveState == .saving }
+
+    /// The Test button asks before sending when cliproxy already rejected a key.
+    func confirmsTest(_ kind: SourceKind) -> Bool {
+        kind == .cliproxy && cliproxyRejections > 0
+    }
 
     /// A Test result, or the form error that stopped a Test, shows only while the form
     /// still holds the same input.
@@ -101,6 +110,14 @@ final class SetupModel {
         case .success(let config):
             tests[kind] = TestRecord(state: .running, input: input)
             let result = await saver.pollControl.test(kind, config)
+            // The request reached the server, so it counts even if the form moved on.
+            if kind == .cliproxy {
+                switch result {
+                case .success: cliproxyRejections = 0
+                case .failure(.unauthorized): cliproxyRejections += 1
+                case .failure: break
+                }
+            }
             guard generation == testGenerations[kind] else { return }
             guard form.sourceConfig(kind) == input else {
                 tests[kind] = nil

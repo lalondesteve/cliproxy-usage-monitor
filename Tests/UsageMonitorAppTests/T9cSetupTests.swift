@@ -349,3 +349,43 @@ struct T9cStorageTests {
         #expect(changes == SettingsChanges(configChanged: [.cliproxy, .ocgo], poolSettings: nil))
     }
 }
+
+@Suite("Test retry confirmation")
+@MainActor
+struct TestRetryConfirmationTests {
+    /// cliproxy bans the IP after 5 wrong keys, so a Test after a rejected key asks first.
+    /// The count survives an edited key and a reopened window; a success clears it.
+    @Test func aRejectedKeyMakesTheNextTestAsk() async throws {
+        let h = try await T9cHarness().loaded()
+        #expect(!h.model.confirmsTest(.cliproxy))
+
+        await h.poll.setTestResult(.failure(.unauthorized))
+        await h.model.test(.cliproxy)
+        #expect(h.model.confirmsTest(.cliproxy))
+        #expect(!h.model.confirmsTest(.ocgo))
+
+        h.model.form.cliproxyKey.value = "another-key"
+        await h.model.load()
+        await h.model.test(.cliproxy)
+        #expect(h.model.cliproxyRejections == 2)
+        #expect(SetupView.retryWarning(2).contains("2 times"))
+        #expect(SetupView.retryWarning(1).contains("once"))
+
+        await h.poll.setTestResult(.failure(.timeout))
+        await h.model.test(.cliproxy)
+        #expect(h.model.cliproxyRejections == 2)
+
+        await h.poll.setTestResult(.success("3 credentials"))
+        await h.model.test(.cliproxy)
+        #expect(!h.model.confirmsTest(.cliproxy))
+    }
+
+    /// ocgo-proxy has no ban, so its 401 never asks.
+    @Test func ocgoRejectionsDoNotAsk() async throws {
+        let h = try await T9cHarness().loaded()
+        await h.poll.setTestResult(.failure(.unauthorized))
+        await h.model.test(.ocgo)
+        #expect(!h.model.confirmsTest(.ocgo))
+        #expect(!h.model.confirmsTest(.cliproxy))
+    }
+}

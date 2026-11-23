@@ -4,6 +4,8 @@ import UsageCore
 /// The Settings form. Logic lives in `SetupModel`, `SetupForm` and `SettingsSaver`.
 struct SetupView: View {
     @Bindable var model: SetupModel
+    /// Set while the retry confirmation for this source is showing.
+    @State private var confirmingTest: SourceKind?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,6 +32,15 @@ struct SetupView: View {
             footer.padding(12)
         }
         .frame(minWidth: 480, minHeight: 560)
+        .alert("Test the key again?", isPresented: Binding(
+            get: { confirmingTest != nil },
+            set: { if !$0 { confirmingTest = nil } }
+        ), presenting: confirmingTest) { kind in
+            Button("Test") { Task { await model.test(kind) } }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text(Self.retryWarning(model.cliproxyRejections))
+        }
     }
 
     private var cliproxySection: some View {
@@ -83,6 +94,11 @@ struct SetupView: View {
         }
     }
 
+    static func retryWarning(_ rejections: Int) -> String {
+        let times = rejections == 1 ? "once" : "\(rejections) times"
+        return "cliproxy has rejected a key \(times) since the last successful test. 5 wrong keys ban this Mac's IP for 30 minutes."
+    }
+
     private static let aliasHelp = "Rarely needed. Merge two credential files for the same login so they count as one account."
 
     @ViewBuilder
@@ -97,8 +113,15 @@ struct SetupView: View {
     private func testRow(_ kind: SourceKind) -> some View {
         let state = model.testState(kind)
         return HStack(alignment: .firstTextBaseline) {
-            Button("Test") { Task { await model.test(kind) } }
-                .disabled(state == .running)
+            Button("Test") {
+                if model.confirmsTest(kind) {
+                    confirmingTest = kind
+                } else {
+                    Task { await model.test(kind) }
+                }
+            }
+            .disabled(state == .running)
+            .help(kind == .cliproxy ? "Sends one request. 5 wrong keys ban this Mac's IP for 30 minutes." : "Sends one request.")
             switch state {
             case .idle:
                 EmptyView()
