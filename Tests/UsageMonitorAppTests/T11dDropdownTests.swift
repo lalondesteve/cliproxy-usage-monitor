@@ -128,7 +128,10 @@ struct T11dDropdownSnapshotTests {
                               sources: E.all.sources)
     }
 
-    @Test func rendersTheForecastLines() throws {
+    /// The forecast lives in the hover card only (user, 2026-11-23: the dropdown shows
+    /// the lines, the percent and the reset countdown, nothing else), so the dropdown is
+    /// the same height with or without forecasts.
+    @Test func forecastsDontAddDropdownLines() throws {
         let plain = try #require(DropdownSnapshot.png(Self.model(forecasts: false), clock: E.clock, scheme: .light))
         let plainRep = try #require(NSBitmapImageRep(data: plain))
         try FileManager.default.createDirectory(at: Self.outputDir, withIntermediateDirectories: true)
@@ -137,9 +140,7 @@ struct T11dDropdownSnapshotTests {
             try png.write(to: Self.outputDir.appendingPathComponent("forecast\(suffix).png"))
             let rep = try #require(NSBitmapImageRep(data: png))
             #expect(rep.pixelsWide == Int(DropdownLayout.width * 2))
-            // Five more lines of 11 pt text at 2x: Claude's forecast line and two
-            // run-outs, one forecast line each for Codex and Go.
-            #expect(rep.pixelsHigh >= plainRep.pixelsHigh + 5 * 2 * 11)
+            #expect(rep.pixelsHigh == plainRep.pixelsHigh)
         }
     }
 }

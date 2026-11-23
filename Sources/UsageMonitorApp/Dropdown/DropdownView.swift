@@ -33,7 +33,7 @@ struct DropdownView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(palette.textSecondary)
             }
-            if let model {
+            if let model, SourcesFooter.hasProblems(model) {
                 Rectangle().fill(palette.track).frame(height: 1)
                 SourcesFooter(model: model, clock: clock)
             }
@@ -67,21 +67,7 @@ struct ProviderRowView: View {
                 number(DropdownText.headline(five), size: 13, palette: palette)
             }
             auxLine(palette: palette)
-            if let both = DropdownText.usableAndQuota(five) {
-                indented(Text(both).foregroundStyle(palette.textMuted))
-            }
-            if let forecast = row.forecast {
-                indented(Text(DropdownText.forecastLine(forecast, clock))
-                    .foregroundStyle(palette.textMuted)
-                    .fixedSize(horizontal: false, vertical: true))
-            }
             if row.weekly != nil { meterRow("weekly", row.weekly, palette: palette) }
-            if let forecast = row.forecast {
-                ForEach(DropdownText.weeklyRunOuts(forecast, clock), id: \.self) { line in
-                    indented(Text(line).foregroundStyle(palette.textMuted)
-                        .fixedSize(horizontal: false, vertical: true))
-                }
-            }
             if row.monthly != nil { meterRow("monthly", row.monthly, palette: palette) }
         }
         .contentShape(Rectangle())
@@ -91,7 +77,7 @@ struct ProviderRowView: View {
         }
     }
 
-    /// Under the line: "2 of 3 known · read 3m ago" on the left (it may wrap), "reset
+    /// Under the line: "2 of 3 known · 3m ago" on the left (it may wrap), "reset
     /// in …" on the right (never truncated); a source in trouble gets its own line.
     private func auxLine(palette: DropdownPalette) -> some View {
         let five = row.fiveHour
@@ -113,16 +99,16 @@ struct ProviderRowView: View {
         .padding(.leading, DropdownLayout.lineInset)
     }
 
-    /// "2 of 3 known · read 3m ago", with "stale, read 42m ago" in the warning color
+    /// "2 of 3 known · 3m ago", with "stale, 42m ago" in the warning color
     /// (plan.md Pool rule 6: freshness on every number). nil when there's nothing to say.
     private func knownAndFreshness(_ g: WindowGauge?, palette: DropdownPalette) -> Text? {
         var parts: [Text] = []
         if let k = DropdownText.known(g) { parts.append(Text(k)) }
         if let oldest = DropdownText.oldestReading(g) {
-            let read = "read \(DropdownText.age(oldest, now: clock.now))"
+            let age = DropdownText.age(oldest, now: clock.now)
             parts.append(DropdownText.isStale(g)
-                ? Text("stale, \(read)").foregroundStyle(palette.warning)
-                : Text(read))
+                ? Text("stale, \(age)").foregroundStyle(palette.warning)
+                : Text(age))
         }
         guard let first = parts.first else { return nil }
         return parts.dropFirst().reduce(first) { $0 + Text(" · ") + $1 }
@@ -206,15 +192,28 @@ struct RowHoverView: View {
     }
 }
 
+/// Only the sources in trouble (auth stopped, failing); a source polling normally, or
+/// not configured, says nothing.
 struct SourcesFooter: View {
     let model: DashboardModel
     let clock: DropdownClock
     @Environment(\.colorScheme) private var scheme
 
+    static func troubled(_ model: DashboardModel) -> [SourceKind] {
+        SourceKind.allCases.filter {
+            switch model.sources[$0] {
+            case .authStopped?, .failing?: true
+            default: false
+            }
+        }
+    }
+
+    static func hasProblems(_ model: DashboardModel) -> Bool { !troubled(model).isEmpty }
+
     var body: some View {
         let palette = DropdownPalette.forScheme(scheme)
         VStack(alignment: .leading, spacing: 2) {
-            ForEach(SourceKind.allCases.filter { model.sources[$0] != nil }, id: \.self) { kind in
+            ForEach(Self.troubled(model), id: \.self) { kind in
                 let s = DropdownText.sourceStatus(kind, model.sources[kind]!, clock)
                 Text(s.text).foregroundStyle(color(s.severity, palette))
             }

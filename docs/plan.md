@@ -197,7 +197,7 @@ subscription within a provider has the same plan.
    5-hour quota. In the
    5-hour gauge, grey it out and count it as 0 in "usable now". The menubar % and
    the number beside the 5-hour line are the usable share; when it differs from the
-   raw quota, the dropdown shows both ("usable 30%, quota 55%").
+   raw quota, the row's hover card shows both ("usable 30%, quota 55%").
 5. **Next refill vs full recovery.** Accounts reset at different times. Report the
    next refill ("14:10, +27% of pool") and do not invent one pool reset time. The
    next refill is the first moment usable quota rises: evaluate it at each known
@@ -292,8 +292,11 @@ account has usage but no reset time, the marker is hidden.
   affinity on, for example), show no lockout forecast.
 - Weekly run-out: each account's own weekly burn rate, extrapolated linearly to that
   account's weekly reset. Separate from the 5-hour simulation.
-- Outputs, shown as text in the dropdown only: "lockout at 17:09 to 17:20", "safe
-  for 5h", "weekly runs out Wed 18:00, resets Thu 09:00".
+- Outputs, shown as text in the row's hover card only: "lockout at 17:09 to 17:20",
+  "safe for 5h", "weekly runs out Wed 18:00, resets Thu 09:00". The dropdown rows
+  carry only the lines, the numbers, "N of M known", the reading's age ("7m ago") and
+  "reset in …" (decided 2026-11-23); a source line appears below them only while a
+  source is failing or stopped.
 - History is chosen per provider. Claude and Codex use the fork's `quota/history`
   when the VM serves it and that provider isn't paused. On startup and wake the app
   fetches from its last stored observation (at least 1h, at most 720h back), so
