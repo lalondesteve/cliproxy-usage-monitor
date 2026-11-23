@@ -55,7 +55,7 @@ struct T6CliproxySourceTests {
                                                   forcedAccount: nil))
         // The gemini credential is out of scope and skipped.
         #expect(snapshot.accounts == [
-            AccountSnapshot(id: AccountID(provider: .claude, identity: "1a2b3c4d"), fileKey: fileA,
+            AccountSnapshot(id: AccountID(provider: .claude, identity: "1a2b3c4d:user-1@example.com"), fileKey: fileA,
                             email: "user-1@example.com", enabled: true, unavailable: [],
                             requestCounter: 1203, routing: AccountRouting(priority: 0, weight: 1),
                             polledAt: nil, pollError: nil),
@@ -64,17 +64,17 @@ struct T6CliproxySourceTests {
                             unavailable: [], requestCounter: nil,
                             routing: AccountRouting(priority: 0, weight: 1), polledAt: nil,
                             pollError: nil),
-            AccountSnapshot(id: AccountID(provider: .codex, identity: "00000000-0000-4000-8000-000000000001"),
+            AccountSnapshot(id: AccountID(provider: .codex, identity: "00000000-0000-4000-8000-000000000001:user-3@example.com"),
                             fileKey: fileC, email: "user-3@example.com", enabled: true,
                             unavailable: [.upstreamUnavailable, .outOfRotation], requestCounter: 50,
                             routing: AccountRouting(priority: 2, weight: 0), polledAt: nil,
                             pollError: nil),
-            AccountSnapshot(id: AccountID(provider: .codex, identity: "00000000-0000-4000-8000-000000000002"),
+            AccountSnapshot(id: AccountID(provider: .codex, identity: "00000000-0000-4000-8000-000000000002:user-4@example.com"),
                             fileKey: fileD, email: "user-4@example.com", enabled: true,
                             unavailable: [], requestCounter: 9,
                             routing: AccountRouting(priority: 1, weight: 3), polledAt: nil,
                             pollError: nil),
-            AccountSnapshot(id: AccountID(provider: .claude, identity: "9f8e7d6c"), fileKey: fileF,
+            AccountSnapshot(id: AccountID(provider: .claude, identity: "9f8e7d6c:user-6@example.com"), fileKey: fileF,
                             email: "user-6@example.com", enabled: true, unavailable: [.outOfRotation],
                             requestCounter: 0, routing: AccountRouting(priority: 0, weight: -1),
                             polledAt: nil, pollError: nil),
@@ -473,8 +473,48 @@ struct T6CliproxySourceTests {
                 "id_token": { "chatgpt_account_id": "" }, "chatgpt_account_id": "acct-2" } ]
             """.utf8))
         #expect(list.credentials.map(\.fileKey) == [fileA, "codex-x.json"])
-        #expect(list.credentials.map(\.id) == [AccountID(provider: .claude, identity: "1a2b3c4d"),
-                                               AccountID(provider: .codex, identity: "acct-2")])
+        // No listed email: Claude takes the one in the file name; Codex, which has no
+        // email in a reliable place, takes the file name in its place (never a bare key).
+        #expect(list.credentials.map(\.id) == [AccountID(provider: .claude, identity: "1a2b3c4d:user-1@example.com"),
+                                               AccountID(provider: .codex, identity: "acct-2:codex-x.json")])
         #expect(list.credentials[1].email == nil)
+    }
+
+    /// plan.md "Identity" after 2026-11-23: the seat is the key plus the email. Files
+    /// sharing a Claude hash or a Codex chatgpt_account_id with different emails are
+    /// separate seats; a legacy Claude name keeps the email alone; Codex without an
+    /// account id keeps the email; emails are trimmed and lowercased; Go isn't parsed
+    /// here.
+    @Test func identityIsTheSeat() throws {
+        let list = try readings(Data("""
+            [ { "id": "claude-f5ae9dff-user-1@example.com.json", "provider": "claude",
+                "email": "User-1@Example.com" },
+              { "id": "claude-f5ae9dff-user-5@example.com.json", "provider": "claude",
+                "email": "user-5@example.com" },
+              { "id": "claude-user-7@example.com.json", "provider": "claude", "email": " User-7@Example.com " },
+              { "id": "codex-85e5a20c-user-2@example.com-team.json", "provider": "codex",
+                "email": "user-2@example.com",
+                "id_token": { "chatgpt_account_id": "00000000-0000-4000-8000-000000000001" } },
+              { "id": "codex-85e5a20c-user-3@example.com-team.json", "provider": "codex",
+                "email": "user-3@example.com",
+                "id_token": { "chatgpt_account_id": "00000000-0000-4000-8000-000000000001" } },
+              { "id": "codex-user-8@example.com-plus.json", "provider": "codex", "email": " User-8@example.com\\n" },
+              { "id": "codex-85e5a20c-a.json", "provider": "codex",
+                "id_token": { "chatgpt_account_id": "00000000-0000-4000-8000-000000000001" } },
+              { "id": "codex-85e5a20c-b.json", "provider": "codex", "email": "  ",
+                "id_token": { "chatgpt_account_id": "00000000-0000-4000-8000-000000000001" } } ]
+            """.utf8))
+        #expect(list.credentials.map(\.id.identity) == [
+            "f5ae9dff:user-1@example.com",
+            "f5ae9dff:user-5@example.com",
+            "user-7@example.com",
+            "00000000-0000-4000-8000-000000000001:user-2@example.com",
+            "00000000-0000-4000-8000-000000000001:user-3@example.com",
+            "user-8@example.com",
+            // Same workspace, no usable email: the file name keeps each one apart.
+            "00000000-0000-4000-8000-000000000001:codex-85e5a20c-a.json",
+            "00000000-0000-4000-8000-000000000001:codex-85e5a20c-b.json",
+        ])
+        #expect(Set(list.credentials.map(\.id)).count == 8)
     }
 }

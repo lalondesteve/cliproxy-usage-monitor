@@ -17,7 +17,8 @@ import SQLite3
 ///   Claude and Codex get `claude-1`, `claude-2`, ... (plan.md "Alias and color"),
 ///   OpenCode Go keeps its account name (`team-a`, plan.md "Accounts by alias").
 ///   `colorIndex` counts from 0 per provider, because colors only need to differ
-///   within one provider row.
+///   within one provider row. An alias row keyed by a Claude or Codex key alone
+///   (before T4b, plan.md "Identity") moves to the first seat with that key.
 public final class SQLiteHistoryStore: HistoryStore, @unchecked Sendable {
     /// plan.md: the history keeps 30 days.
     public static let defaultRetention: TimeInterval = 30 * 24 * 3600
@@ -187,6 +188,24 @@ public final class SQLiteHistoryStore: HistoryStore, @unchecked Sendable {
                     (row.text(0), Int(row.int(1)))
                 }
                 if let found = existing.first { return (alias: found.0, colorIndex: found.1) }
+
+                // A row keyed by the seat's key alone goes to the first seat with that
+                // key, so the account keeps its alias and color; other seats sharing the
+                // key get new ones. Only builds before T4b wrote such rows: since T4b no
+                // Claude or Codex identity is a bare key (`SeatIdentity.make`).
+                if let key = SeatIdentity.legacyKey(id.provider, id.identity) {
+                    let legacy = try connection.prepare(
+                        "SELECT alias, color_index FROM aliases WHERE provider = ? AND identity = ?"
+                    ).query([.text(id.provider.rawValue), .text(key)]) { row in
+                        (row.text(0), Int(row.int(1)))
+                    }
+                    if let found = legacy.first {
+                        try connection.prepare(
+                            "UPDATE aliases SET identity = ? WHERE provider = ? AND identity = ?"
+                        ).run([.text(id.identity), .text(id.provider.rawValue), .text(key)])
+                        return (alias: found.0, colorIndex: found.1)
+                    }
+                }
 
                 let next = try connection.prepare(
                     "SELECT COALESCE(MAX(color_index) + 1, 0) FROM aliases WHERE provider = ?"

@@ -89,19 +89,26 @@ enum CliproxyCredentialsParser {
         return overflow ? nil : sum
     }
 
-    /// plan.md "Identity": Claude uses the 8-hex hash in `claude-<hash>-<email>.json`,
-    /// and the email for legacy `claude-<email>.json`; Codex uses
-    /// `chatgpt_account_id`. Falls back to the email, then the file name.
+    /// plan.md "Identity": the seat, the provider's key plus the email (`SeatIdentity`).
+    /// Claude's key is the 8-hex hash in `claude-<hash>-<email>.json`; a legacy
+    /// `claude-<email>.json` uses the email alone. Codex's key is `chatgpt_account_id`;
+    /// without one the email alone. A key without a usable email takes the file name in
+    /// the email's place (`SeatIdentity.make`); with neither key nor email the file name
+    /// stands alone. Emails are trimmed and lowercased.
     static func identity(_ provider: Provider, fileKey: String, email: String?,
                          entry: CliproxyJSON) -> String {
         switch provider {
         case .claude:
-            if let hash = claudeHash(fileKey) { return hash }
-            return (email ?? legacyClaudeEmail(fileKey) ?? fileKey).lowercased()
+            if let hash = claudeHash(fileKey) {
+                return SeatIdentity.make(key: hash, email: SeatIdentity.usableEmail(email) ?? hashedClaudeEmail(fileKey),
+                                         fileKey: fileKey)
+            }
+            return SeatIdentity.usableEmail(email) ?? legacyClaudeEmail(fileKey) ?? fileKey.lowercased()
         case .codex:
             let accountID = entry["id_token"]?["chatgpt_account_id"]?.nonEmptyString
                 ?? entry["chatgpt_account_id"]?.nonEmptyString
-            return accountID ?? email?.lowercased() ?? fileKey
+            if let accountID { return SeatIdentity.make(key: accountID, email: email, fileKey: fileKey) }
+            return SeatIdentity.usableEmail(email) ?? fileKey
         case .go:
             return fileKey
         }
@@ -116,6 +123,17 @@ enum CliproxyCredentialsParser {
               rest.dropFirst(8).first == "-", rest.contains("@")
         else { return nil }
         return String(hash)
+    }
+
+    /// The email in `claude-<hash>-<email>.json`, for a listing without `email`. It
+    /// assumes nothing follows the email but `.json`: a duplicate such as
+    /// `claude-aaaa0001-a@example.com-2.json` gives `a@example.com-2`, a separate seat.
+    /// Every live listing carries `email`, so this fallback isn't used there.
+    static func hashedClaudeEmail(_ fileKey: String) -> String? {
+        guard claudeHash(fileKey) != nil else { return nil }
+        var email = fileKey.lowercased().dropFirst("claude-".count + 9)
+        if email.hasSuffix(".json") { email = email.dropLast(".json".count) }
+        return email.contains("@") ? String(email) : nil
     }
 
     static func legacyClaudeEmail(_ fileKey: String) -> String? {

@@ -38,8 +38,9 @@ public final class Ledger: LedgerUpdating, @unchecked Sendable {
     private var readings: [ReadingKey: SourceReading] = [:]
     private var counters = CounterHistory()
     /// Every credential file seen in a snapshot, with its identity before the alias
-    /// list. Lets the counter proof notice a file that left an account's set.
-    private var seenFiles: [String: AccountID] = [:]
+    /// list and its email. Lets the counter proof notice a file that left an account's
+    /// set.
+    private var seenFiles: [String: (id: AccountID, email: String?)] = [:]
     private var aliasCache: [AccountID: AliasEntry] = [:]
 
     // Derived on every write, so reads are lookups.
@@ -100,7 +101,8 @@ public final class Ledger: LedgerUpdating, @unchecked Sendable {
             readings = [:]
             counters = CounterHistory()
             seenFiles = [:]
-            for s in lastSnapshots.sorted(by: { $0.takenAt < $1.takenAt }) {
+            // Snapshots stored before T4b carry key-only identities; upgrade them to seats.
+            for s in lastSnapshots.map(SeatIdentity.upgrade).sorted(by: { $0.takenAt < $1.takenAt }) {
                 ingestAccounts(s)
                 merge(s.readings)
             }
@@ -153,7 +155,7 @@ public final class Ledger: LedgerUpdating, @unchecked Sendable {
     private func ingestAccounts(_ s: SourceSnapshot) {
         snapshots[s.source] = s
         for a in s.accounts where a.requestCounter != nil {
-            seenFiles[a.fileKey] = a.id
+            seenFiles[a.fileKey] = (a.id, a.email)
         }
     }
 
@@ -188,12 +190,19 @@ public final class Ledger: LedgerUpdating, @unchecked Sendable {
     // MARK: Resolution
 
     /// The account a credential file belongs to: its identity, replaced by the alias
-    /// list entry for that file if there is one.
-    private func resolve(_ raw: AccountID, fileKey: String) -> AccountID {
+    /// list entry for that file if there is one. An entry that is a bare key names the
+    /// seat with that key and this file's email (`SeatIdentity.aliasTarget`).
+    private func resolve(_ raw: AccountID, fileKey: String, email: String?) -> AccountID {
         guard let alias = settings.identityAliases[fileKey]?
             .trimmingCharacters(in: .whitespacesAndNewlines), !alias.isEmpty
         else { return raw }
-        return AccountID(provider: raw.provider, identity: alias)
+        return AccountID(provider: raw.provider,
+                         identity: SeatIdentity.aliasTarget(alias, provider: raw.provider,
+                                                           fileKey: fileKey, email: email))
+    }
+
+    private func resolve(_ a: AccountSnapshot) -> AccountID {
+        resolve(a.id, fileKey: a.fileKey, email: a.email)
     }
 
     private func recompute() {
@@ -206,7 +215,7 @@ public final class Ledger: LedgerUpdating, @unchecked Sendable {
             for a in s.accounts {
                 let file = FileRef(provider: a.id.provider, fileKey: a.fileKey)
                 guard d.owner[file] == nil else { continue }   // a file listed twice
-                let id = resolve(a.id, fileKey: a.fileKey)
+                let id = resolve(a)
                 d.owner[file] = id
                 if groups[id] == nil { order.append(id) }
                 groups[id, default: []].append(a)
@@ -216,7 +225,7 @@ public final class Ledger: LedgerUpdating, @unchecked Sendable {
             }
             if let r = s.routing {
                 let forced = r.forcedAccount.map { f in
-                    s.accounts.first { $0.id == f }.map { resolve($0.id, fileKey: $0.fileKey) } ?? f
+                    s.accounts.first { $0.id == f }.map(resolve) ?? f
                 }
                 d.routing[kind] = RoutingConfig(strategy: r.strategy, sessionAffinity: r.sessionAffinity,
                                                 forcedAccount: forced)
@@ -359,7 +368,8 @@ public final class Ledger: LedgerUpdating, @unchecked Sendable {
         // that has since left the credential list has no known owner.
         for fileKey in counters.fileKeys where !files.contains(fileKey) {
             guard counters.present(fileKey, from: before, to: current) else { continue }
-            guard let raw = seenFiles[fileKey], resolve(raw, fileKey: fileKey) != id else {
+            guard let seen = seenFiles[fileKey],
+                  resolve(seen.id, fileKey: fileKey, email: seen.email) != id else {
                 return false
             }
         }

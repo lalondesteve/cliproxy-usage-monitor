@@ -72,23 +72,30 @@ to the internet. Block those paths at the public ingress first; the app uses the
 NetBird address.
 
 Identity for deduplication, using listing fields only (never download auth files;
-they hold tokens):
+they hold tokens). An account is a seat: the provider's key plus the email. Team
+seats share the key but each has its own quota, so the key alone would count them
+once.
 
-- Claude: the 8-hex hash in the credential name `claude-<hash>-<email>.json`. It is
-  the SHA-256 of `organization_uuid`, or of `account_uuid` when there is no
-  organization, so two organizations under one email stay separate. Legacy names
-  `claude-<email>.json` fall back to the email. Until cliproxy migrates it, a legacy
-  file and a hashed file for the same subscription (or an account-hashed file and its
-  organization-hashed successor) get different keys and would count twice. Phase 0
-  checks for such pairs; confirmed ones go into an alias list in the app's settings.
-- Codex: `chatgpt_account_id` (in `id_token`).
+- Claude: the 8-hex hash in the credential name `claude-<hash>-<email>.json`, plus
+  the email. The hash is the SHA-256 of `organization_uuid`, or of `account_uuid`
+  when there is no organization, so it names the organization and the email names
+  the seat in it. Legacy names `claude-<email>.json` use the email alone. Until
+  cliproxy migrates it, a legacy file and a hashed file for the same login (or an
+  account-hashed file and its organization-hashed successor) get different
+  identities and would count twice. Phase 0 checks for such pairs; confirmed ones go
+  into an alias list in the app's settings. An alias entry names the other file's
+  identity, or just its key (`1a2b3c4d`), which means that key plus this file's
+  email.
+- Codex: `chatgpt_account_id` (in `id_token`), plus the email. Without an account id,
+  the email alone.
 - OpenCode Go: the account name. Each one is assumed to be a separate workspace;
   Phase 0 checks it.
 
-Superseded on 2026-11-23 (see "P0.4 as captured" and Decisions): the capture shows
-team seats sharing a Claude hash or a Codex `chatgpt_account_id` with separate
-quotas, so identity becomes the seat: the Claude hash plus the email, and the Codex
-`chatgpt_account_id` plus the email. The code still uses the rule above until T4b.
+Decided on 2026-11-23 (see "P0.4 as captured" and Decisions): the capture shows team
+seats sharing a Claude hash or a Codex `chatgpt_account_id` with separate quotas.
+Before that, identity was the key alone. T4b made the change; a database from an
+earlier build still loads, and each key-only alias and color goes to the first seat
+with that key.
 
 Routing: `routing.strategy` is `round-robin` (default), `weighted-round-robin` or
 `fill-first`. Read it from `GET /v0/management/routing/strategy`, which returns the
@@ -163,7 +170,8 @@ subscription within a provider has the same plan.
 
 1. **Pool remaining** per provider and window = mean of `100 - used%` over unique,
    enabled accounts. Same capacity per account, so the mean is the pool share.
-2. **Deduplicate** accounts by identity (see Data sources), not by credential file.
+2. **Deduplicate** accounts by identity, the seat (see Data sources), not by credential
+   file. Two files for one seat count once; two seats sharing a key count twice.
 3. **Unknown stays unknown.** An account is unknown when it has never been read or
    its only readings failed. It is never counted as 0% or 100%. With unknown
    accounts the pooled number becomes a range, with each unknown at 0% and then at

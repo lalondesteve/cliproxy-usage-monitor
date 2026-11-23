@@ -83,7 +83,7 @@ struct SetupView: View {
         } header: {
             Text("Identity aliases")
         } footer: {
-            Text("Maps a credential file to the identity of another file for the same subscription, so the two count once.")
+            Text("Maps a credential file to another file for the same login, so the two count once. Give the other file's hash (1a2b3c4d) or its full identity (1a2b3c4d:x@example.com).")
                 .foregroundStyle(.secondary)
         }
     }

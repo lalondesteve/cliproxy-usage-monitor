@@ -168,6 +168,23 @@ struct T6bLiveSemanticsTests {
         #expect(snapshot.accounts.allSatisfy { $0.polledAt == nil && $0.pollError == nil })
     }
 
+    /// T4b: identity is the seat (plan.md "Identity", "P0.4 as captured"). The two
+    /// f5ae9dff files and the two Codex files sharing one chatgpt_account_id each give
+    /// two accounts: five seats from five files.
+    @Test(.enabled(if: cliproxyCaptured, missing("cliproxy capture")))
+    func capturedPairsAreSeparateSeats() async throws {
+        let snapshot = try await cliproxySnapshot()
+        // File-name hash plus files[*].email; files[4,5].id_token.chatgpt_account_id
+        // plus files[4,5].email.
+        #expect(snapshot.accounts.map(\.id) == [
+            AccountID(provider: .claude, identity: "ea14e983:user-4@example.com"),
+            AccountID(provider: .claude, identity: "f5ae9dff:user-1@example.com"),
+            AccountID(provider: .claude, identity: "f5ae9dff:user-5@example.com"),
+            AccountID(provider: .codex, identity: "00000000-0000-4000-8000-000000000001:user-2@example.com"),
+            AccountID(provider: .codex, identity: "00000000-0000-4000-8000-000000000001:user-3@example.com"),
+        ])
+    }
+
     @Test(.enabled(if: cliproxyCaptured, missing("cliproxy capture")))
     func quotaBlockedCredentialsCoolDownUntilTheirRetry() async throws {
         let snapshot = try await cliproxySnapshot()

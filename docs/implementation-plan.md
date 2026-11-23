@@ -405,10 +405,11 @@ marks and `resetProven`.
   for A (one `upstreamUnavailable`) and one available file for B give A usable, the
   flag on the right `CredentialRoute`, and B unchanged; T11b's 1/2 case runs on
   these merged routes. Fork join: a fork `current` reading for a Codex `fileKey`
-  resolves to the account whose credential carries that `chatgpt_account_id`; one
+  resolves through that credential (the `fileKey` selects it) to the seat its
+  `chatgpt_account_id` plus email identifies; one
   for a `fileKey` not in the credential list is ignored. Alias: E14's legacy file
   with stored readings, restored after the alias is added, shows those readings on
-  account `1a2b3c4d`; the same alias passed to `updateSettings` on a running ledger
+  the seat `1a2b3c4d:x@example.com` (T4b: identity is the key plus the email); the same alias passed to `updateSettings` on a running ledger
   merges the two accounts without a restore.
 - Depends on: T1 (the `HistoryStore` protocol is in the T1 contracts; a fake until
   T5 lands).

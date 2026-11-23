@@ -53,9 +53,13 @@ private func ocgo(_ at: Date, _ accounts: [AccountSnapshot], readings: [SourceRe
                                           forcedAccount: forced.map { AccountID(provider: .go, identity: $0) }))
 }
 
-private let idA = AccountID(provider: .claude, identity: "aaaa0001")
+// plan.md "Identity": a Claude account is the seat, the hash plus the email.
+private let seatA = "aaaa0001:a@example.com"
+private let seatB = "bbbb0002:b@example.com"
+private let idA = AccountID(provider: .claude, identity: seatA)
 private let fileA = "claude-aaaa0001-a@example.com.json"
-private let fileA2 = "claude-aaaa0001-a2@example.com.json"
+/// A second credential file for seat A (same hash, same email).
+private let fileA2 = "claude-aaaa0001-a@example.com-2.json"
 
 @Suite("T4 ledger: reset proof by counters (E5 to E5e)")
 struct T4CounterProofTests {
@@ -66,7 +70,7 @@ struct T4CounterProofTests {
         let ledger = Ledger(store: store, settings: PoolSettings())
         let r = reading(fileA, .fiveHour, used: 40, resets: t("12:00"), at: t("11:45"))
         for (at, counters) in [(t("11:50"), before), (t("12:05"), after)] {
-            let accounts = counters.keys.sorted().map { cred("aaaa0001", file: $0, counter: counters[$0]) }
+            let accounts = counters.keys.sorted().map { cred(seatA, file: $0, counter: counters[$0]) }
             try t4PersistAndApply(cliproxy(at, accounts, readings: [r]), store: store, ledger: ledger)
         }
         return ledger
@@ -114,7 +118,7 @@ struct T4CounterProofTests {
 
     @Test func noListingBeforeResetGivesNoProof() throws {
         let ledger = Ledger(store: store, settings: PoolSettings())
-        try t4PersistAndApply(cliproxy(t("12:05"), [cred("aaaa0001", file: fileA, counter: 1500)],
+        try t4PersistAndApply(cliproxy(t("12:05"), [cred(seatA, file: fileA, counter: 1500)],
                                        readings: [reading(fileA, .fiveHour, used: 40, resets: t("12:00"),
                                                           at: t("11:45"))]),
                               store: store, ledger: ledger)
@@ -130,24 +134,24 @@ struct T4CounterProofTests {
         // Used at 11:55 (1500 -> 1501), then idle across the 12:00 reset.
         let ledger = Ledger(store: store, settings: PoolSettings())
         for (at, value) in [(t("11:50"), 1500), (t("11:55"), 1501), (t("12:05"), 1501)] {
-            try t4PersistAndApply(cliproxy(at, [cred("aaaa0001", file: fileA, counter: value)]),
+            try t4PersistAndApply(cliproxy(at, [cred(seatA, file: fileA, counter: value)]),
                                   store: store, ledger: ledger)
         }
         #expect(ledger.resetProven(idA, .fiveHour, resetAt: t("12:00")))
         // A change in between breaks it: 1500 at 11:50, 1503 at 12:01, back to 1500 at 12:05.
         let other = Ledger(store: T4FakeHistoryStore(), settings: PoolSettings())
         for (at, value) in [(t("11:50"), 1500), (t("12:01"), 1503), (t("12:05"), 1500)] {
-            other.apply(cliproxy(at, [cred("aaaa0001", file: fileA, counter: value)]))
+            other.apply(cliproxy(at, [cred(seatA, file: fileA, counter: value)]))
         }
         #expect(!other.resetProven(idA, .fiveHour, resetAt: t("12:00")))
     }
 
     @Test func proofIsPerAccount() throws {
-        let idB = AccountID(provider: .claude, identity: "bbbb0002")
+        let idB = AccountID(provider: .claude, identity: seatB)
         let ledger = Ledger(store: store, settings: PoolSettings())
         for (at, b) in [(t("11:50"), 300), (t("12:05"), 305)] {
-            ledger.apply(cliproxy(at, [cred("aaaa0001", file: fileA, counter: 1500),
-                                       cred("bbbb0002", file: "claude-bbbb0002-b@example.com.json", counter: b)]))
+            ledger.apply(cliproxy(at, [cred(seatA, file: fileA, counter: 1500),
+                                       cred(seatB, file: "claude-bbbb0002-b@example.com.json", counter: b)]))
         }
         #expect(ledger.resetProven(idA, .weekly, resetAt: t("12:00")))
         #expect(!ledger.resetProven(idB, .weekly, resetAt: t("12:00")))
@@ -162,10 +166,10 @@ struct T4CounterProofTests {
                                  source: .passive)
         func ledger(counterAfter: Int) -> Ledger {
             let ledger = Ledger(store: T4FakeHistoryStore(), settings: PoolSettings())
-            ledger.apply(cliproxy(t("11:50"), [cred("aaaa0001", file: fileA, counter: 1500)],
+            ledger.apply(cliproxy(t("11:50"), [cred(seatA, file: fileA, counter: 1500)],
                                   readings: [reading(fileA, .fiveHour, used: 40, resets: t("12:00"),
                                                      at: t("11:45"))]))
-            ledger.apply(cliproxy(t("12:05"), [cred("aaaa0001", file: fileA, counter: counterAfter)],
+            ledger.apply(cliproxy(t("12:05"), [cred(seatA, file: fileA, counter: counterAfter)],
                                   readings: [late]))
             return ledger
         }
@@ -181,9 +185,9 @@ struct T4CounterProofTests {
     @Test func readingThatEndsAsObservedIsNoProof() {
         let ledger = Ledger(store: store, settings: PoolSettings())
         let codexFile = "codex-user-1@example.com-plus.json"
-        let codex = AccountID(provider: .codex, identity: "chatgpt-acct-7f3e")
+        let codex = AccountID(provider: .codex, identity: "chatgpt-acct-7f3e:user-1@example.com")
         let observed = date("2026-11-22T12:00:01Z")
-        ledger.apply(cliproxy(t("12:05"), [cred(.codex, "chatgpt-acct-7f3e", file: codexFile, counter: nil)],
+        ledger.apply(cliproxy(t("12:05"), [cred(.codex, codex.identity, file: codexFile, email: "user-1@example.com", counter: nil)],
                               readings: [reading(.codex, codexFile, .fiveHour, used: 100, resets: observed,
                                                  at: observed)]))
         #expect(ledger.latest(codex, .fiveHour)?.reading.observedAt == observed)
@@ -192,7 +196,7 @@ struct T4CounterProofTests {
 
     @Test func freshReadingWithUnsetResetProves() {
         let ledger = Ledger(store: store, settings: PoolSettings())
-        ledger.apply(cliproxy(t("12:05"), [cred("aaaa0001", file: fileA, counter: nil)],
+        ledger.apply(cliproxy(t("12:05"), [cred(seatA, file: fileA, counter: nil)],
                               readings: [reading(fileA, .weekly, used: 0, resets: nil, at: t("12:01"))]))
         #expect(ledger.resetProven(idA, .weekly, resetAt: t("12:00")))
     }
@@ -201,10 +205,10 @@ struct T4CounterProofTests {
     /// knows whose file fileA2 was, so it must still deny the proof.
     @Test func fileLeavingAcrossResetGivesNoProofAfterRestore() throws {
         let live = Ledger(store: store, settings: PoolSettings())
-        try t4PersistAndApply(cliproxy(t("11:50"), [cred("aaaa0001", file: fileA, counter: 1500),
-                                                    cred("aaaa0001", file: fileA2, counter: 7)]),
+        try t4PersistAndApply(cliproxy(t("11:50"), [cred(seatA, file: fileA, counter: 1500),
+                                                    cred(seatA, file: fileA2, counter: 7)]),
                               store: store, ledger: live)
-        try t4PersistAndApply(cliproxy(t("12:05"), [cred("aaaa0001", file: fileA, counter: 1500)]),
+        try t4PersistAndApply(cliproxy(t("12:05"), [cred(seatA, file: fileA, counter: 1500)]),
                               store: store, ledger: live)
         #expect(!live.resetProven(idA, .fiveHour, resetAt: t("12:00")))
 
@@ -218,9 +222,9 @@ struct T4CounterProofTests {
         // proof holds.
         let ledger = Ledger(store: store, settings: PoolSettings())
         let fileB = "claude-bbbb0002-b@example.com.json"
-        ledger.apply(cliproxy(t("11:50"), [cred("aaaa0001", file: fileA, counter: 1500),
-                                           cred("bbbb0002", file: fileB, counter: 1)]))
-        ledger.apply(cliproxy(t("12:05"), [cred("aaaa0001", file: fileA, counter: 1500)]))
+        ledger.apply(cliproxy(t("11:50"), [cred(seatA, file: fileA, counter: 1500),
+                                           cred(seatB, file: fileB, counter: 1)]))
+        ledger.apply(cliproxy(t("12:05"), [cred(seatA, file: fileA, counter: 1500)]))
         #expect(ledger.resetProven(idA, .fiveHour, resetAt: t("12:00")))
     }
 }
@@ -231,11 +235,11 @@ struct T4ReadingTests {
 
     @Test func e7MissingWindowKeepsEarlierReading() throws {
         let ledger = Ledger(store: store, settings: PoolSettings())
-        ledger.apply(cliproxy(t("11:00"), [cred("aaaa0001", file: fileA)], readings: [
+        ledger.apply(cliproxy(t("11:00"), [cred(seatA, file: fileA)], readings: [
             reading(fileA, .fiveHour, used: 30, resets: t("15:00"), at: t("11:00")),
             reading(fileA, .weekly, used: 10, resets: t("23:00"), at: t("11:00")),
         ]))
-        ledger.apply(cliproxy(t("11:10"), [cred("aaaa0001", file: fileA)], readings: [
+        ledger.apply(cliproxy(t("11:10"), [cred(seatA, file: fileA)], readings: [
             reading(fileA, .weekly, used: 12, resets: t("23:00"), at: t("11:10")),
         ]))
         let fiveHour = try #require(ledger.latest(idA, .fiveHour))
@@ -246,7 +250,7 @@ struct T4ReadingTests {
 
     @Test func olderReadingDoesNotReplaceNewer() {
         let ledger = Ledger(store: store, settings: PoolSettings())
-        ledger.apply(cliproxy(t("11:00"), [cred("aaaa0001", file: fileA)], readings: [
+        ledger.apply(cliproxy(t("11:00"), [cred(seatA, file: fileA)], readings: [
             reading(fileA, .weekly, used: 12, resets: nil, at: t("11:10")),
         ]))
         ledger.apply(readings: [reading(fileA, .weekly, used: 10, resets: nil, at: t("11:05"), source: .forkPoller)])
@@ -255,7 +259,7 @@ struct T4ReadingTests {
 
     @Test func newestReadingAcrossAnAccountsFilesWins() {
         let ledger = Ledger(store: store, settings: PoolSettings())
-        ledger.apply(cliproxy(t("11:00"), [cred("aaaa0001", file: fileA), cred("aaaa0001", file: fileA2)],
+        ledger.apply(cliproxy(t("11:00"), [cred(seatA, file: fileA), cred(seatA, file: fileA2)],
                               readings: [reading(fileA, .weekly, used: 20, resets: nil, at: t("10:50")),
                                          reading(fileA2, .weekly, used: 22, resets: nil, at: t("10:55"))]))
         #expect(ledger.latest(idA, .weekly)?.reading.fileKey == fileA2)
@@ -265,7 +269,7 @@ struct T4ReadingTests {
     @Test func identicalReadingsFromTwoFilesPickTheLowestFileKey() {
         let a = reading(fileA, .weekly, used: 20, resets: t("23:00"), at: t("10:50"))
         let a2 = reading(fileA2, .weekly, used: 20, resets: t("23:00"), at: t("10:50"))
-        let creds = [cred("aaaa0001", file: fileA), cred("aaaa0001", file: fileA2)]
+        let creds = [cred(seatA, file: fileA), cred(seatA, file: fileA2)]
         let expected = min(fileA, fileA2)
         for order in [[a, a2], [a2, a]] {
             let ledger = Ledger(store: T4FakeHistoryStore(), settings: PoolSettings())
@@ -298,9 +302,9 @@ struct T4ReadingTests {
 
     @Test func unknownFileKeyIgnoredUntilCredentialAppears() throws {
         let ledger = Ledger(store: store, settings: PoolSettings())
-        ledger.apply(cliproxy(t("11:00"), [cred("aaaa0001", file: fileA)]))
+        ledger.apply(cliproxy(t("11:00"), [cred(seatA, file: fileA)]))
         let stray = "claude-cccc0003-c@example.com.json"
-        let idC = AccountID(provider: .claude, identity: "cccc0003")
+        let idC = AccountID(provider: .claude, identity: "cccc0003:c@example.com")
         try t4PersistAndApply(readings: [reading(stray, .weekly, used: 44, resets: nil, at: t("11:01"),
                                                  source: .forkPoller)],
                               store: store, ledger: ledger)
@@ -309,18 +313,18 @@ struct T4ReadingTests {
         #expect(ledger.latest(idA, .weekly) == nil)
         #expect(ledger.latest(idC, .weekly) == nil)
 
-        ledger.apply(cliproxy(t("11:02"), [cred("aaaa0001", file: fileA), cred("cccc0003", file: stray)]))
+        ledger.apply(cliproxy(t("11:02"), [cred(seatA, file: fileA), cred("cccc0003:c@example.com", file: stray)]))
         #expect(ledger.latest(idC, .weekly)?.reading.usedPercent == 44)
         #expect(ledger.latest(idA, .weekly) == nil)
     }
 
     @Test func forkCurrentJoinsCodexByChatgptAccountID() throws {
         let ledger = Ledger(store: store, settings: PoolSettings())
-        // T6 sets a Codex credential's identity to its chatgpt_account_id; the fork's
-        // account.id is the credential's fileKey.
+        // T6 sets a Codex credential's identity to its seat, chatgpt_account_id plus the
+        // email; the fork's account.id is the credential's fileKey.
         let codexFile = "codex-user-1@example.com-plus.json"
-        let codex = AccountID(provider: .codex, identity: "chatgpt-acct-7f3e")
-        ledger.apply(cliproxy(t("11:00"), [cred(.codex, "chatgpt-acct-7f3e", file: codexFile,
+        let codex = AccountID(provider: .codex, identity: "chatgpt-acct-7f3e:user-1@example.com")
+        ledger.apply(cliproxy(t("11:00"), [cred(.codex, codex.identity, file: codexFile,
                                                 email: "user-1@example.com")]))
         try t4PersistAndApply(readings: [
             reading(.codex, codexFile, .weekly, used: 18, resets: t("23:00"), at: t("10:58"), source: .forkPoller),
@@ -344,12 +348,12 @@ struct T4ReadingTests {
     @Test func unclassifiedResolvesThroughCredential() {
         let ledger = Ledger(store: store, settings: PoolSettings())
         let codexFile = "codex-user-1@example.com-plus.json"
-        let codex = AccountID(provider: .codex, identity: "chatgpt-acct-7f3e")
+        let codex = AccountID(provider: .codex, identity: "chatgpt-acct-7f3e:user-1@example.com")
         let u = UnclassifiedReading(provider: .codex, fileKey: codexFile, lengthSeconds: nil, usedPercent: 4,
                                     resetsAt: nil, observedAt: t("11:00"))
         let stray = UnclassifiedReading(provider: .codex, fileKey: "codex-other.json", lengthSeconds: 60,
                                         usedPercent: 9, resetsAt: nil, observedAt: t("11:00"))
-        ledger.apply(cliproxy(t("11:00"), [cred(.codex, "chatgpt-acct-7f3e", file: codexFile)],
+        ledger.apply(cliproxy(t("11:00"), [cred(.codex, codex.identity, file: codexFile, email: "user-1@example.com")],
                               unclassified: [u, stray]))
         #expect(ledger.unclassified(codex) == [u])
     }
@@ -363,11 +367,11 @@ struct T4MergeTests {
         let ledger = Ledger(store: store, settings: PoolSettings())
         let fileB = "claude-bbbb0002-b@example.com.json"
         ledger.apply(cliproxy(t("11:00"), [
-            cred("aaaa0001", file: fileA, email: "a@example.com", counter: 10,
+            cred(seatA, file: fileA, email: "a@example.com", counter: 10,
                  routing: AccountRouting(priority: 0, weight: 1)),
-            cred("aaaa0001", file: fileA2, unavailable: [.upstreamUnavailable], counter: 3,
+            cred(seatA, file: fileA2, unavailable: [.upstreamUnavailable], counter: 3,
                  routing: AccountRouting(priority: 0, weight: 1)),
-            cred("bbbb0002", file: fileB, email: "b@example.com", counter: 5,
+            cred(seatB, file: fileB, email: "b@example.com", counter: 5,
                  routing: AccountRouting(priority: 0, weight: 1)),
         ], routing: RoutingConfig(strategy: .roundRobin, sessionAffinity: false, forcedAccount: nil)))
 
@@ -383,7 +387,7 @@ struct T4MergeTests {
             CredentialRoute(fileKey: fileA2, priority: 0, weight: 1, enabled: true,
                             unavailable: [.upstreamUnavailable]),
         ].sorted { $0.fileKey < $1.fileKey })
-        let b = try #require(accounts.first { $0.id.identity == "bbbb0002" })
+        let b = try #require(accounts.first { $0.id.identity == seatB })
         #expect(b.enabled && b.unavailable.isEmpty)
         #expect(b.credentials == [CredentialRoute(fileKey: fileB, priority: 0, weight: 1, enabled: true,
                                                   unavailable: [])])
@@ -397,8 +401,8 @@ struct T4MergeTests {
     @Test func enabledIfAnyFileAvailableIfAnyEnabledFile() throws {
         let ledger = Ledger(store: store, settings: PoolSettings())
         ledger.apply(cliproxy(t("11:00"), [
-            cred("aaaa0001", file: fileA, enabled: false),
-            cred("aaaa0001", file: fileA2, unavailable: [.upstreamUnavailable]),
+            cred(seatA, file: fileA, enabled: false),
+            cred(seatA, file: fileA2, unavailable: [.upstreamUnavailable]),
         ]))
         let a = try #require(ledger.accounts.first)
         #expect(a.enabled)
@@ -406,8 +410,8 @@ struct T4MergeTests {
         #expect(a.unavailable == [.upstreamUnavailable])
 
         ledger.apply(cliproxy(t("11:01"), [
-            cred("aaaa0001", file: fileA, enabled: false),
-            cred("aaaa0001", file: fileA2, enabled: false),
+            cred(seatA, file: fileA, enabled: false),
+            cred(seatA, file: fileA2, enabled: false),
         ]))
         #expect(ledger.accounts.first?.enabled == false)
     }
@@ -442,17 +446,20 @@ struct T4MergeTests {
         #expect(abs(refill.poolGain - 60) < 1e-9, "\(label)")
     }
 
+    /// E14 with seat identity: the hashed files are seat `1a2b3c4d:x@example.com`, the
+    /// legacy file is `x@example.com`. The alias list entry `1a2b3c4d` (the bare key,
+    /// as E14 writes it) names the seat with that key and the legacy file's email.
     @Test func e14TwoAccountsThenOneWithAlias() throws {
         let legacy = "claude-x@example.com.json"
-        let hashed = AccountID(provider: .claude, identity: "1a2b3c4d")
+        let hashed = AccountID(provider: .claude, identity: "1a2b3c4d:x@example.com")
         let snapshot = cliproxy(t("11:00"), [
-            cred("1a2b3c4d", file: "claude-1a2b3c4d-x@example.com.json"),
-            cred("1a2b3c4d", file: "claude-1a2b3c4d-x@example.com-2.json"),
-            cred("x@example.com", file: legacy),
+            cred(hashed.identity, file: "claude-1a2b3c4d-x@example.com.json", email: "x@example.com"),
+            cred(hashed.identity, file: "claude-1a2b3c4d-x@example.com-2.json", email: "x@example.com"),
+            cred("x@example.com", file: legacy, email: "x@example.com"),
         ], readings: [reading(legacy, .weekly, used: 35, resets: nil, at: t("10:59"))])
         let ledger = Ledger(store: store, settings: PoolSettings())
         ledger.apply(snapshot)
-        #expect(ledger.accounts.map(\.id.identity) == ["1a2b3c4d", "x@example.com"])
+        #expect(ledger.accounts.map(\.id.identity) == ["1a2b3c4d:x@example.com", "x@example.com"])
         #expect(ledger.accounts.map(\.alias) == ["claude-1", "claude-2"])
         #expect(ledger.latest(hashed, .weekly) == nil)
 
@@ -471,12 +478,12 @@ struct T4MergeTests {
 
     @Test func e14AliasOnRestoreReattachesStoredReadings() throws {
         let legacy = "claude-x@example.com.json"
-        let hashed = AccountID(provider: .claude, identity: "1a2b3c4d")
+        let hashed = AccountID(provider: .claude, identity: "1a2b3c4d:x@example.com")
         // A previous run, with no alias, stored the legacy file's reading.
         let first = Ledger(store: store, settings: PoolSettings())
         try t4PersistAndApply(cliproxy(t("11:00"), [
-            cred("1a2b3c4d", file: "claude-1a2b3c4d-x@example.com.json"),
-            cred("x@example.com", file: legacy),
+            cred(hashed.identity, file: "claude-1a2b3c4d-x@example.com.json", email: "x@example.com"),
+            cred("x@example.com", file: legacy, email: "x@example.com"),
         ], readings: [reading(legacy, .weekly, used: 35, resets: nil, at: t("10:59")),
                       reading("claude-1a2b3c4d-x@example.com.json", .fiveHour, used: 12, resets: nil,
                               at: t("10:58"))]),
@@ -493,16 +500,70 @@ struct T4MergeTests {
         #expect(restored.latest(hashed, .fiveHour)?.reading.usedPercent == 12)
     }
 
+    /// An alias entry written as a full seat identity merges too, and a bare key falls
+    /// back to the email in a legacy file's name when the listing has no `email`.
+    @Test func aliasAsFullSeatOrBareKeyWithoutListedEmail() {
+        let legacy = "claude-x@example.com.json"
+        let hashed = AccountID(provider: .claude, identity: "1a2b3c4d:x@example.com")
+        let snapshot = cliproxy(t("11:00"), [
+            cred(hashed.identity, file: "claude-1a2b3c4d-x@example.com.json", email: "x@example.com"),
+            cred("x@example.com", file: legacy),
+        ])
+        for alias in ["1a2b3c4d:x@example.com", "1a2b3c4d", " 1a2b3c4d "] {
+            let ledger = Ledger(store: T4FakeHistoryStore(), settings: PoolSettings(identityAliases: [legacy: alias]))
+            ledger.apply(snapshot)
+            #expect(ledger.accounts.map(\.id) == [hashed], "alias \(alias)")
+        }
+    }
+
+    /// The decision of 2026-11-23 (plan.md "P0.4 as captured"): two Claude files sharing
+    /// the hash `f5ae9dff` with different emails are two seats with separate quotas.
+    @Test func claudeSeatsSharingAHashCountSeparately() throws {
+        let file1 = "claude-f5ae9dff-user-1@example.com.json"
+        let file5 = "claude-f5ae9dff-user-5@example.com.json"
+        let seat1 = AccountID(provider: .claude, identity: "f5ae9dff:user-1@example.com")
+        let seat5 = AccountID(provider: .claude, identity: "f5ae9dff:user-5@example.com")
+        let ledger = Ledger(store: store, settings: PoolSettings())
+        ledger.apply(cliproxy(t("11:00"), [
+            cred(seat1.identity, file: file1, email: "user-1@example.com"),
+            cred(seat5.identity, file: file5, email: "user-5@example.com", unavailable: [.upstreamUnavailable]),
+        ], readings: [reading(file1, .weekly, used: 17, resets: nil, at: t("10:58")),
+                      reading(file5, .weekly, used: 36, resets: nil, at: t("10:59"))]))
+        #expect(ledger.accounts.map(\.id) == [seat1, seat5])
+        #expect(ledger.accounts.map(\.alias) == ["claude-1", "claude-2"])
+        #expect(ledger.accounts.map(\.unavailable) == [[], [.upstreamUnavailable]])
+        // Each seat keeps its own reading; the newer one doesn't cover the other.
+        #expect(ledger.latest(seat1, .weekly)?.reading.usedPercent == 17)
+        #expect(ledger.latest(seat5, .weekly)?.reading.usedPercent == 36)
+    }
+
+    @Test func codexSeatsSharingAWorkspaceCountSeparately() throws {
+        let file2 = "codex-85e5a20c-user-2@example.com-team.json"
+        let file3 = "codex-85e5a20c-user-3@example.com-team.json"
+        let workspace = "00000000-0000-4000-8000-000000000001"
+        let seat2 = AccountID(provider: .codex, identity: "\(workspace):user-2@example.com")
+        let seat3 = AccountID(provider: .codex, identity: "\(workspace):user-3@example.com")
+        let ledger = Ledger(store: store, settings: PoolSettings())
+        ledger.apply(cliproxy(t("11:00"), [
+            cred(.codex, seat2.identity, file: file2, email: "user-2@example.com"),
+            cred(.codex, seat3.identity, file: file3, email: "user-3@example.com"),
+        ], readings: [reading(.codex, file2, .weekly, used: 43, resets: nil, at: t("10:58")),
+                      reading(.codex, file3, .weekly, used: 24, resets: nil, at: t("10:57"))]))
+        #expect(ledger.accounts.map(\.id) == [seat2, seat3])
+        #expect(ledger.latest(seat2, .weekly)?.reading.usedPercent == 43)
+        #expect(ledger.latest(seat3, .weekly)?.reading.usedPercent == 24)
+    }
+
     @Test func aliasAndColorComeFromTheStore() throws {
         let ledger = Ledger(store: store, settings: PoolSettings())
         ledger.apply(ocgo(t("11:00"), [goAccount("team-a", polledAt: t("11:00")),
                                        goAccount("team-b", polledAt: t("11:00"))]))
-        ledger.apply(cliproxy(t("11:00"), [cred("aaaa0001", file: fileA)]))
+        ledger.apply(cliproxy(t("11:00"), [cred(seatA, file: fileA)]))
         #expect(ledger.accounts.map(\.alias) == ["claude-1", "go-1", "go-2"])
         #expect(ledger.accounts.map(\.colorIndex) == [0, 0, 1])
         // Each account is assigned once, not on every write or read.
         let calls = store.aliasCalls
-        ledger.apply(cliproxy(t("11:01"), [cred("aaaa0001", file: fileA)]))
+        ledger.apply(cliproxy(t("11:01"), [cred(seatA, file: fileA)]))
         _ = ledger.accounts
         #expect(store.aliasCalls == calls)
     }
@@ -526,8 +587,8 @@ struct T4MergeTests {
 @Suite("T4 ledger: restore")
 struct T4RestoreTests {
     let store = T4FakeHistoryStore()
-    let idCodex = AccountID(provider: .codex, identity: "chatgpt-acct-1")
-    let idB = AccountID(provider: .claude, identity: "bbbb0002")
+    let idCodex = AccountID(provider: .codex, identity: "chatgpt-acct-1:user-1@example.com")
+    let idB = AccountID(provider: .claude, identity: seatB)
     let fileB = "claude-bbbb0002-b@example.com.json"
     let fileCodex = "codex-user-1@example.com-plus.json"
 
@@ -537,10 +598,10 @@ struct T4RestoreTests {
         let unclassified = UnclassifiedReading(provider: .codex, fileKey: fileCodex, lengthSeconds: nil,
                                                usedPercent: 4, resetsAt: nil, observedAt: t("11:50"))
         try t4PersistAndApply(cliproxy(t("11:50"), [
-            cred("aaaa0001", file: fileA, email: "a@example.com", counter: 1500,
+            cred(seatA, file: fileA, email: "a@example.com", counter: 1500,
                  routing: AccountRouting(priority: 1, weight: 1)),
-            cred("bbbb0002", file: fileB, counter: 300),
-            cred(.codex, "chatgpt-acct-1", file: fileCodex, counter: 800),
+            cred(seatB, file: fileB, counter: 300),
+            cred(.codex, idCodex.identity, file: fileCodex, email: "user-1@example.com", counter: 800),
         ], readings: [
             reading(fileA, .fiveHour, used: 30, resets: t("14:00"), at: t("11:50")),
             reading(fileA, .weekly, used: 10, resets: t("12:00"), at: t("11:50")),
@@ -559,10 +620,10 @@ struct T4RestoreTests {
 
         // E7 snapshot 2: weekly only for A; B used; codex idle.
         try t4PersistAndApply(cliproxy(t("12:05"), [
-            cred("aaaa0001", file: fileA, email: "a@example.com", counter: 1500,
+            cred(seatA, file: fileA, email: "a@example.com", counter: 1500,
                  routing: AccountRouting(priority: 1, weight: 1)),
-            cred("bbbb0002", file: fileB, counter: 304),
-            cred(.codex, "chatgpt-acct-1", file: fileCodex, counter: 800),
+            cred(seatB, file: fileB, counter: 304),
+            cred(.codex, idCodex.identity, file: fileCodex, email: "user-1@example.com", counter: 800),
         ], readings: [
             reading(fileA, .weekly, used: 12, resets: date("2026-11-29T12:00:00Z"), at: t("12:05")),
         ], unclassified: [unclassified], routing: routing), store: store, ledger: ledger)
@@ -625,7 +686,7 @@ struct T4RestoreTests {
 
         // Accounts: three cliproxy, three Go, including the never-polled one.
         #expect(Set(ledger.accounts.map(\.id.identity))
-                == ["aaaa0001", "bbbb0002", "chatgpt-acct-1", "team-a", "team-b", "team-c"])
+                == [seatA, seatB, idCodex.identity, "team-a", "team-b", "team-c"])
         let teamC = AccountID(provider: .go, identity: "team-c")
         #expect(ledger.accounts.contains { $0.id == teamC })
         for w in WindowKind.allCases { #expect(ledger.latest(teamC, w) == nil) }
@@ -649,11 +710,11 @@ struct T4RestoreTests {
 
     @Test func restoredLedgerContinuesCounterRuns() throws {
         let live = Ledger(store: store, settings: PoolSettings())
-        try t4PersistAndApply(cliproxy(t("11:50"), [cred("aaaa0001", file: fileA, counter: 1500)]),
+        try t4PersistAndApply(cliproxy(t("11:50"), [cred(seatA, file: fileA, counter: 1500)]),
                               store: store, ledger: live)
         let restored = Ledger(store: store, settings: PoolSettings())
         try restored.restore()
-        restored.apply(cliproxy(t("12:05"), [cred("aaaa0001", file: fileA, counter: 1500)]))
+        restored.apply(cliproxy(t("12:05"), [cred(seatA, file: fileA, counter: 1500)]))
         #expect(restored.resetProven(idA, .fiveHour, resetAt: t("12:00")))
     }
 }
@@ -666,7 +727,7 @@ struct T4ConcurrencyTests {
             group.addTask {
                 for i in 0..<200 {
                     let at = t("11:00").addingTimeInterval(Double(i) * 60)
-                    ledger.apply(cliproxy(at, [cred("aaaa0001", file: fileA, counter: i)],
+                    ledger.apply(cliproxy(at, [cred(seatA, file: fileA, counter: i)],
                                           readings: [reading(fileA, .weekly, used: Double(i % 100),
                                                              resets: nil, at: at)]))
                 }
