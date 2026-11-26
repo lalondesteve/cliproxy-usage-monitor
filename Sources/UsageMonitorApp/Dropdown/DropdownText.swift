@@ -57,6 +57,15 @@ enum DropdownText {
         return "reset in " + duration(minutes: Int((seconds / 60).rounded(.up)))
     }
 
+    /// Under the weekly percent: "reset in 2d 3h" to the soonest weekly reset still
+    /// ahead among the window's accounts; nil when none is known.
+    static func resetCountdown(_ g: WindowGauge?, now: Date) -> String? {
+        guard let next = g?.accounts.compactMap(\.resetsAt).filter({ $0 > now }).min() else {
+            return nil
+        }
+        return "reset in " + duration(minutes: Int((next.timeIntervalSince(now) / 60).rounded(.up)))
+    }
+
     /// "40m", "1h 05m", "5h", "2d 3h".
     static func duration(minutes m: Int) -> String {
         let m = max(0, m)

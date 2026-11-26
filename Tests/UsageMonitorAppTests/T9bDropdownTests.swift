@@ -122,6 +122,14 @@ struct T9bDropdownTests {
         #expect(DropdownText.countdown(nil, now: E.now) == nil)
     }
 
+    @Test func weeklyResetCountdownUsesTheSoonestResetAhead() {
+        // E1 weekly: every account resets Thu 26 09:00; now is Sun 22 13:20.
+        #expect(DropdownText.resetCountdown(E.e1.rows[0].weekly, now: E.now) == "reset in 3d 19h")
+        // Past resets don't count; with none ahead there's nothing to show.
+        #expect(DropdownText.resetCountdown(E.e1.rows[0].weekly, now: E.at("10:00", day: 26)) == nil)
+        #expect(DropdownText.resetCountdown(nil, now: E.now) == nil)
+    }
+
     @Test func nextRefillGainInHover() {
         let hover = RowHover(row: E.e3.rows[0], clock: E.clock)
         #expect(hover.sections[0].notes.contains("next refill 14:10, +27% of pool"))
