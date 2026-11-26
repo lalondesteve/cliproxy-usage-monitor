@@ -27,10 +27,16 @@ struct DropdownView: View {
                 ForEach(model.rows, id: \.provider) { row in
                     ProviderRowView(row: row, clock: clock)
                 }
-            } else {
+            } else if model?.antigravity == nil {
                 Text(model == nil ? "Loading…" : "No data yet")
                     .font(.system(size: 12))
                     .foregroundStyle(palette.textSecondary)
+            }
+            if let usage = model?.antigravity {
+                if let model, !model.rows.isEmpty {
+                    Rectangle().fill(palette.track).frame(height: 1)
+                }
+                AntigravityQuotaView(usage: usage, clock: clock, palette: palette)
             }
             if let model, SourcesFooter.hasProblems(model) {
                 Rectangle().fill(palette.track).frame(height: 1)

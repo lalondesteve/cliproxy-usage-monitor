@@ -52,7 +52,11 @@ enum DropdownText {
         guard let g else { return nil }
         if g.allFull { return "reset in 5h" }
         guard let refill = g.nextRefill else { return nil }
-        let seconds = refill.at.timeIntervalSince(now)
+        return countdown(to: refill.at, now: now)
+    }
+
+    static func countdown(to reset: Date, now: Date) -> String {
+        let seconds = reset.timeIntervalSince(now)
         guard seconds > 0 else { return "reset due" }
         return "reset in " + duration(minutes: Int((seconds / 60).rounded(.up)))
     }
@@ -63,7 +67,7 @@ enum DropdownText {
         guard let next = g?.accounts.compactMap(\.resetsAt).filter({ $0 > now }).min() else {
             return nil
         }
-        return "reset in " + duration(minutes: Int((next.timeIntervalSince(now) / 60).rounded(.up)))
+        return countdown(to: next, now: now)
     }
 
     /// "40m", "1h 05m", "5h", "2d 3h".

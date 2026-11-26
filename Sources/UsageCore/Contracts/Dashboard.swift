@@ -202,11 +202,14 @@ public struct DashboardModel: Equatable, Sendable {
     public let generatedAt: Date
     public let rows: [ProviderRow]
     public let sources: [SourceKind: SourceStatus]
+    public let antigravity: AntigravityUsage?
 
-    public init(generatedAt: Date, rows: [ProviderRow], sources: [SourceKind: SourceStatus]) {
+    public init(generatedAt: Date, rows: [ProviderRow], sources: [SourceKind: SourceStatus],
+                antigravity: AntigravityUsage? = nil) {
         self.generatedAt = generatedAt
         self.rows = rows
         self.sources = sources
+        self.antigravity = antigravity
     }
 
     public func row(_ provider: Provider) -> ProviderRow? {
