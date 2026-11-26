@@ -4,11 +4,12 @@ import Foundation
 /// `DashboardModel` (plan.md "Polling budget", "Auth failures stop polling", and
 /// "Forecast" for the history range).
 ///
-/// A tick runs two chains at the same time:
+/// A tick polls the configured sources concurrently:
 /// - cliproxy: the credential list (`UsageSource.fetch`), then the fork's
 ///   `quota/history` (one request for every provider). An auth error from the first
 ///   skips the second.
 /// - ocgo: `/_ocgo/status`.
+/// - Antigravity: model quotas and the Claude and GPT quota summary from the local login.
 ///
 /// Auth latch: an auth error (`SourceError.isAuthError`: 401, or a 403 for remote
 /// management disabled or a banned IP) from a source, from the fork history route for
@@ -62,8 +63,10 @@ public actor PollCoordinator: PollControl {
     private let scheduler: any PollScheduler
     private let interval: TimeInterval
     private let build: DashboardBuilder
+    private let antigravitySource: AntigravitySource?
 
     private var settings: PoolSettings
+    private var antigravity: AntigravityUsage?
     private var configured: [SourceKind: Configured] = [:]
     private var statuses: [SourceKind: SourceStatus] = [:]
     private var latches: [SourceKind: SourceError] = [:]
@@ -77,6 +80,7 @@ public actor PollCoordinator: PollControl {
     private var started = false
     private var polling = false
     private var pending: Set<SourceKind> = []
+    private var antigravityPending = false
 
     /// The last model published.
     public private(set) var model: DashboardModel?
@@ -90,6 +94,7 @@ public actor PollCoordinator: PollControl {
                 settings: PoolSettings, clock: any NowProvider,
                 scheduler: any PollScheduler = SystemPollScheduler(),
                 interval: TimeInterval = PollCoordinator.defaultInterval,
+                antigravitySource: AntigravitySource? = nil,
                 build: @escaping DashboardBuilder = PoolEngine.dashboard(ledger:settings:sources:now:)) {
         self.setup = setup
         self.ledger = ledger
@@ -98,6 +103,7 @@ public actor PollCoordinator: PollControl {
         self.clock = clock
         self.scheduler = scheduler
         self.interval = interval
+        self.antigravitySource = antigravitySource
         self.build = build
         (models, continuation) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(1))
         for kind in SourceKind.allCases {
@@ -170,7 +176,7 @@ public actor PollCoordinator: PollControl {
 
     /// One poll of every configured source that isn't latched, then a publish.
     public func tick() async {
-        await poll(Set(SourceKind.allCases))
+        await poll(Set(SourceKind.allCases), includeAntigravity: true)
     }
 
     /// Between `.willSleep` and `.didWake`.
@@ -298,22 +304,33 @@ public actor PollCoordinator: PollControl {
 
     /// Polls `kinds`. A call that arrives while a poll runs is folded into it, so a
     /// source never has two requests in flight.
-    private func poll(_ kinds: Set<SourceKind>) async {
+    private func poll(_ kinds: Set<SourceKind>, includeAntigravity: Bool = false) async {
         start()
         pending.formUnion(kinds)
+        if includeAntigravity, antigravitySource != nil {
+            antigravityPending = true
+        }
         guard !polling else { return }
         polling = true
-        while !pending.isEmpty {
+        while !pending.isEmpty || antigravityPending {
             let batch = pending
+            let includeAntigravity = antigravityPending
             pending = []
+            antigravityPending = false
             await withTaskGroup(of: Void.self) { group in
                 if batch.contains(.cliproxy) { group.addTask { await self.pollCliproxy() } }
                 if batch.contains(.ocgo) { group.addTask { _ = await self.fetch(.ocgo) } }
+                if includeAntigravity { group.addTask { await self.pollAntigravity() } }
             }
             pruneIfDue()
             publish()
         }
         polling = false
+    }
+
+    private func pollAntigravity() async {
+        guard let antigravitySource, sleepStartedAt == nil else { return }
+        antigravity = await antigravitySource.fetch(now: clock.now)
     }
 
     private func pollCliproxy() async {
@@ -442,7 +459,8 @@ public actor PollCoordinator: PollControl {
             return ProviderRow(provider: row.provider, fiveHour: row.fiveHour, weekly: row.weekly,
                                monthly: row.monthly, unclassified: row.unclassified, forecast: forecast)
         }
-        return DashboardModel(generatedAt: m.generatedAt, rows: rows, sources: m.sources)
+        return DashboardModel(generatedAt: m.generatedAt, rows: rows, sources: m.sources,
+                              antigravity: antigravity)
     }
 
     @discardableResult
