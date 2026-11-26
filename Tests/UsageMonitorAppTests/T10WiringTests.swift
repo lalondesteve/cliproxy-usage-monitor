@@ -382,3 +382,20 @@ actor T10ForwardingControl: PollControl {
         await target.poolSettingsChanged(settings)
     }
 }
+
+/// An accessory app gets ⌘C/⌘V in text fields only from the main menu.
+@Suite("Main menu")
+@MainActor
+struct MainMenuTests {
+    @Test func editMenuCarriesTheTextShortcuts() {
+        let items = MainMenu.make().items.compactMap(\.submenu).flatMap(\.items)
+        func item(_ key: String, _ action: Selector) -> NSMenuItem? {
+            items.first { $0.keyEquivalent == key && $0.action == action }
+        }
+        #expect(item("c", #selector(NSText.copy(_:)))?.keyEquivalentModifierMask == .command)
+        #expect(item("v", #selector(NSText.paste(_:)))?.keyEquivalentModifierMask == .command)
+        #expect(item("x", #selector(NSText.cut(_:))) != nil)
+        #expect(item("a", #selector(NSText.selectAll(_:))) != nil)
+        #expect(item("w", #selector(NSWindow.performClose(_:))) != nil)
+    }
+}

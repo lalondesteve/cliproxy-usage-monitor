@@ -15,6 +15,7 @@ enum Wiring {
         /// The SQLite history file, or `":memory:"`.
         var databasePath: String
         var scheduler: any PollScheduler = SystemPollScheduler()
+        var antigravitySource: AntigravitySource? = nil
         /// How far `clock` runs from wall time (`--now`); the dropdown's ages and
         /// countdowns use the same offset.
         var clockOffset: TimeInterval = 0
@@ -29,12 +30,13 @@ enum Wiring {
                 Wiring.log("no Application Support folder (\(error)); history kept in memory")
                 path = ":memory:"
             }
+            let transport = URLSessionTransport()
             return Environment(settingsStore: SettingsStore(), secrets: Keychain(),
-                               transport: URLSessionTransport(), clock: SystemNowProvider(),
-                               databasePath: path)
+                               transport: transport, clock: SystemNowProvider(), databasePath: path,
+                               antigravitySource: AntigravitySource(transport: transport))
         }
 
-        /// Development: both sources answer from a capture folder laid out like
+        /// Development: the proxy sources answer from a capture folder laid out like
         /// `Tests/UsageCoreTests/Fixtures/live/`. Nothing real is touched: settings live
         /// in their own UserDefaults suite (reset at each launch, never the standard
         /// one), secrets in memory, history in memory. With `now` (the capture time) the
@@ -146,7 +148,7 @@ enum Wiring {
         let settings = env.settingsStore.load() ?? AppSettings()
         return PollCoordinator(setup: pollSetup(env), ledger: Ledger(store: store, settings: settings.pool),
                                store: store, settings: settings.pool, clock: env.clock,
-                               scheduler: env.scheduler)
+                               scheduler: env.scheduler, antigravitySource: env.antigravitySource)
     }
 
     // MARK: Settings

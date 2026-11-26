@@ -68,7 +68,9 @@ struct T9bDropdownTests {
             #expect(p.series.count == 4)
             for (c, want) in zip(p.series, four) {
                 let got = rgb(c)
-                #expect(abs(got.0 - want.0) + abs(got.1 - want.1) + abs(got.2 - want.2) < 0.01)
+                // Swift 6.2 times out type-checking this sum inside #expect, so it is computed first.
+                let error: Double = abs(got.0 - want.0) + abs(got.1 - want.1) + abs(got.2 - want.2)
+                #expect(error < 0.01)
             }
             for i in 0..<p.series.count { #expect(p.fill(.series(i)) == p.series[i]) }
             #expect(distance(p.fill(.series(0)), p.fill(.series(6))) > 0.3)
@@ -118,6 +120,14 @@ struct T9bDropdownTests {
         // E8: no refill known and not full: nothing.
         #expect(DropdownText.countdown(E.e8Codex.fiveHour, now: E.now) == nil)
         #expect(DropdownText.countdown(nil, now: E.now) == nil)
+    }
+
+    @Test func weeklyResetCountdownUsesTheSoonestResetAhead() {
+        // E1 weekly: every account resets Thu 26 09:00; now is Sun 22 13:20.
+        #expect(DropdownText.resetCountdown(E.e1.rows[0].weekly, now: E.now) == "reset in 3d 19h")
+        // Past resets don't count; with none ahead there's nothing to show.
+        #expect(DropdownText.resetCountdown(E.e1.rows[0].weekly, now: E.at("10:00", day: 26)) == nil)
+        #expect(DropdownText.resetCountdown(nil, now: E.now) == nil)
     }
 
     @Test func nextRefillGainInHover() {
