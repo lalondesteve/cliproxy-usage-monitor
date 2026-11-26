@@ -121,9 +121,15 @@ struct ProviderRowView: View {
                 OverlapLineView(bars: g?.bars ?? [], palette: palette, pace: g?.pace, thickness: 6)
                 number(DropdownText.headline(g), size: 12, palette: palette)
             }
-            if let notes = knownAndFreshness(g, palette: palette) {
-                indented(notes.foregroundStyle(palette.textMuted)
-                    .fixedSize(horizontal: false, vertical: true))
+            let notes = knownAndFreshness(g, palette: palette)
+            let countdown = g?.window == .weekly ? DropdownText.resetCountdown(g, now: clock.now) : nil
+            if notes != nil || countdown != nil {
+                indented(HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    if let notes { notes.fixedSize(horizontal: false, vertical: true) }
+                    Spacer(minLength: 6)
+                    if let countdown { Text(countdown).lineLimit(1).fixedSize().layoutPriority(1) }
+                }
+                .foregroundStyle(palette.textMuted))
             }
         }
         .padding(.top, 3)
